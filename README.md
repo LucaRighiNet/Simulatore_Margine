@@ -11,8 +11,14 @@ simulato — in valore assoluto, in percentuale di marginalità e in punti perce
 
 ## Come si usa
 
-Apri `dist/simulatore-margine.html`. È un file unico: nessuna installazione, nessun
-account, nessun server. Si apre con un doppio clic, anche da una cartella di rete.
+Apri `dist/simulatore-margine.html`. È un file unico e autosufficiente: nessuna
+installazione, nessun account, nessun server, nessuna connessione. Si apre con un doppio
+clic da disco, da chiavetta o da cartella di rete.
+
+Autosufficiente alla lettera: 229 KB, con caratteri, stile, calcolo e grafici dentro il
+file. Verificato con la rete bloccata, non ci sono richieste verso l'esterno, né
+all'apertura né durante l'uso. Si copia, si allega a una mail, si mette su una chiavetta e
+funziona dov'è.
 
 Alla prima apertura mostra una commessa di esempio con numeri inventati, segnalata da un
 avviso. Il pulsante "Parti da zero" svuota tutto e lascia la maschera minima.
@@ -113,6 +119,7 @@ pieno. Finché restano a zero, il margine calcolato non ha significato.
     test/               test del motore
     tools/build.mjs     assemblaggio nel file unico
     tools/cpm.mjs       analisi del grafo delle attività
+    assets/font/        caratteri incorporati nel file distribuibile
     dist/               file da distribuire
 
 Perché esiste un passo di assemblaggio: una pagina aperta da cartella di rete ha origine
@@ -125,3 +132,12 @@ due cose in poche righe, senza alcuna dipendenza esterna.
 Nessuna consuntivazione, nessun avanzamento lavori, nessuna storicizzazione, nessun ciclo
 di vita con approvazioni, nessuna integrazione con il gestionale. Una simulazione è una
 fotografia della data in cui è stata fatta e non va aggiornata nel tempo.
+
+## Caratteri
+
+Il file incorpora il sottoinsieme latino di IBM Plex Sans e IBM Plex Mono, 98 KB in base64,
+per funzionare senza rete. IBM Plex è distribuito con SIL Open Font License 1.1, che
+consente di incorporare e ridistribuire riportando la nota di copyright e la licenza. Il
+testo completo è in `assets/font/LICENSE-IBM-Plex.txt` e la nota è nel file prodotto.
+
+Copyright 2017 IBM Corp. con Reserved Font Name "Plex".

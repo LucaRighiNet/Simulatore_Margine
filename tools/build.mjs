@@ -48,8 +48,41 @@ if (autoRiferimenti.length) {
 }
 
 const TITOLO = 'Simulatore Margine Commessa';
-const FONT = '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>\n'
-  + '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">';
+
+/**
+ * Caratteri incorporati nel file invece che richiesti a un server.
+ *
+ * Un file che si porta in giro deve funzionare anche senza rete: su una cartella di rete
+ * aziendale, su una chiavetta, su un portatile in cantiere. Con il collegamento a Google
+ * Fonts il testo ripiegherebbe sui caratteri di sistema e ogni apertura tenterebbe una
+ * richiesta verso l'esterno, cosa che su una rete aziendale chiusa aggiunge solo attesa.
+ *
+ * IBM Plex è distribuito con SIL Open Font License 1.1, che consente di incorporare e
+ * ridistribuire a patto di riportare la nota di copyright e la licenza: la nota è qui
+ * sotto e il testo completo è in assets/font/LICENSE-IBM-Plex.txt.
+ *
+ * Incorporato il solo sottoinsieme latino: 98 KB in base64. Per i caratteri fuori da quel
+ * sottoinsieme il browser ripiega da sé sulla catena dichiarata nel foglio di stile.
+ */
+const FACCE = [
+  ['IBM Plex Sans', '400 600', 'plex-sans.woff2'],
+  ['IBM Plex Mono', '400', 'plex-mono-400.woff2'],
+  ['IBM Plex Mono', '500', 'plex-mono-500.woff2'],
+];
+
+function caratteriIncorporati() {
+  const regole = FACCE.map(([famiglia, peso, file]) => {
+    const dati = readFileSync(join(radice, 'assets', 'font', file)).toString('base64');
+    return `@font-face{font-family:'${famiglia}';font-style:normal;font-weight:${peso};`
+      + `font-display:swap;src:url(data:font/woff2;base64,${dati}) format('woff2')}`;
+  });
+  return '<style>\n/* IBM Plex. Copyright 2017 IBM Corp. con Reserved Font Name "Plex".\n'
+    + '   SIL Open Font License 1.1 — https://openfontlicense.org\n'
+    + '   Testo completo della licenza: assets/font/LICENSE-IBM-Plex.txt */\n'
+    + regole.join('\n') + '\n</style>';
+}
+
+const FONT = caratteriIncorporati();
 
 const contenuto = [
   `<title>${TITOLO}</title>`,

@@ -510,6 +510,26 @@ Nota su C: Excel non viene scartato perché inadeguato al calcolo, ma perché su
 file si moltiplica in varianti non allineate e il confronto fra commesse diventa
 impossibile.
 
+### 5.0bis Autosufficienza del file distribuito
+
+Un file che si porta in giro deve funzionare dove arriva, non dove è stato costruito. Con
+il collegamento ai caratteri su un server esterno, su una rete aziendale chiusa il testo
+ripiegherebbe sui caratteri di sistema e ogni apertura tenterebbe comunque una richiesta
+verso l'esterno, aggiungendo solo attesa.
+
+I caratteri sono quindi incorporati nel file come dati, sottoinsieme latino, 98 KB in
+base64. Il file passa da 130 a 229 KB e non ha più alcuna dipendenza esterna.
+
+| Verifica | Esito |
+|---|---|
+| Richieste di rete con http e https bloccati | nessuna, né all'apertura né durante l'uso |
+| Caratteri effettivamente applicati | i tre tagli risultano caricati e il testo si rende con essi, non con il ripiego |
+| Funzionamento di tutte le schede senza rete | nessun errore |
+
+IBM Plex è distribuito con SIL Open Font License 1.1, che consente di incorporare e
+ridistribuire riportando la nota di copyright e la licenza: la nota è nel file prodotto e
+il testo completo in `assets/font/LICENSE-IBM-Plex.txt`.
+
 ### 5.1 Stack tecnico
 
 - Pagina HTML singola, JavaScript senza framework e senza fase di build.
