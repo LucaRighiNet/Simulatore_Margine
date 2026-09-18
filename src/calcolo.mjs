@@ -47,24 +47,38 @@ export function fattoreVoce(sim, linea, voce) {
   );
 }
 
-/** Costo di una voce nella colonna simulato: base KOM moltiplicata per gli scostamenti. */
-export function costoVoceSimulato(sim, linea, voce) {
-  return costoVoce(voce, 'kom', sim.tariffe) * fattoreVoce(sim, linea, voce);
+/**
+ * Su quale colonna poggia la simulazione. Normalmente il KOM, che è il budget di cui il PM
+ * risponde. Se il KOM non è ancora stato compilato la simulazione poggia sul preventivo:
+ * senza questo ripiego, chi compila solo il preventivo muove i cursori e non vede nulla,
+ * perché moltiplicare zero per qualunque scostamento dà zero.
+ */
+export function baseSimulato(sim) {
+  const haKom = (sim.linee || []).some((l) => (
+    num((l.ricavo || {}).kom) !== 0
+    || (l.voci || []).some((v) => num((v.kom || {}).q) !== 0)
+  ));
+  return haKom ? 'kom' : 'preventivo';
 }
 
-function ricavoLinea(sim, linea, colonna) {
+/** Costo di una voce nella colonna simulato: colonna base moltiplicata per gli scostamenti. */
+export function costoVoceSimulato(sim, linea, voce, base) {
+  return costoVoce(voce, base || baseSimulato(sim), sim.tariffe) * fattoreVoce(sim, linea, voce);
+}
+
+function ricavoLinea(sim, linea, colonna, base) {
   if (colonna !== 'simulato') return num((linea.ricavo || {})[colonna]);
   const d = sim.delta || {};
   return (
-    num((linea.ricavo || {}).kom) *
+    num((linea.ricavo || {})[base]) *
     (1 + frazione(d.ricavo)) *
     (1 + frazione((d.ricavoLinea || {})[linea.id]))
   );
 }
 
-function costoDellaVoce(sim, linea, voce, colonna) {
+function costoDellaVoce(sim, linea, voce, colonna, base) {
   return colonna === 'simulato'
-    ? costoVoceSimulato(sim, linea, voce)
+    ? costoVoceSimulato(sim, linea, voce, base)
     : costoVoce(voce, colonna, sim.tariffe);
 }
 
@@ -72,6 +86,7 @@ const rapporto = (a, b) => (b !== 0 ? a / b : null);
 
 /** Calcola una colonna completa: dettaglio per linea e totali di commessa. */
 export function calcolaColonna(sim, colonna) {
+  const base = colonna === 'simulato' ? baseSimulato(sim) : colonna;
   const p = sim.parametri || {};
   const sg = frazione(p.sgPct);
   const ctg = frazione(p.ctgPct);
@@ -82,12 +97,12 @@ export function calcolaColonna(sim, colonna) {
     for (const cat of CATEGORIE) perCategoria[cat] = 0;
     const voci = {};
     for (const voce of linea.voci || []) {
-      const c = costoDellaVoce(sim, linea, voce, colonna);
+      const c = costoDellaVoce(sim, linea, voce, colonna, base);
       perCategoria[voce.cat] = (perCategoria[voce.cat] || 0) + c;
       voci[voce.id] = c;
     }
     const cd = CATEGORIE.reduce((s, cat) => s + perCategoria[cat], 0);
-    const r = ricavoLinea(sim, linea, colonna);
+    const r = ricavoLinea(sim, linea, colonna, base);
     const mdc = r - cd;
     return {
       id: linea.id,
@@ -115,6 +130,7 @@ export function calcolaColonna(sim, colonna) {
 
   return {
     colonna,
+    base,
     linee,
     cd,
     ricavo,
@@ -180,6 +196,7 @@ export function calcola(sim) {
   for (const c of COLONNE) colonne[c] = calcolaColonna(sim, c);
   return {
     colonne,
+    baseSimulazione: baseSimulato(sim),
     gapPreventivoKom: gap(colonne.preventivo, colonne.kom),
     gapKomSimulato: gap(colonne.kom, colonne.simulato),
   };
@@ -198,7 +215,7 @@ export function sensitivita(sim, ampiezzaPct = 10) {
       if (haVoci) driver.push({ chiave, etichetta: linea.nome + ' · ' + ETICHETTA_CATEGORIA[cat] });
     }
   }
-  const base = calcolaColonna(sim, 'simulato').mi;
+  const partenza = calcolaColonna(sim, 'simulato').mi;
   const righe = driver.map((d) => {
     const conDelta = (segno) => {
       const clone = {
@@ -213,10 +230,10 @@ export function sensitivita(sim, ampiezzaPct = 10) {
       };
       return calcolaColonna(clone, 'simulato').mi;
     };
-    const su = conDelta(1) - base;
-    const giu = conDelta(-1) - base;
+    const su = conDelta(1) - partenza;
+    const giu = conDelta(-1) - partenza;
     return { ...d, su, giu, ampiezza: Math.abs(su - giu) };
   });
   righe.sort((x, y) => y.ampiezza - x.ampiezza);
-  return { base, ampiezzaPct, righe };
+  return { base: partenza, ampiezzaPct, righe };
 }

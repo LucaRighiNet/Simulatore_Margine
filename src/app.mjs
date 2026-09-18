@@ -3,8 +3,8 @@
 // (righe, linee, scheda); digitare un numero aggiorna soltanto i valori derivati, per non
 // perdere il fuoco dal campo in cui si sta scrivendo.
 
-import { calcola, calcolaColonna, sensitivita, COLONNE, CATEGORIE, ETICHETTA_CATEGORIA, ETICHETTA_COLONNA } from './calcolo.mjs';
-import { nuovaSimulazione, simulazioneEsempio, eEsempio, normalizza, nuovaVoce, nuovaLinea, nuovaTariffa, SUGGERIMENTI, nomeFile } from './modello.mjs';
+import { calcola, calcolaColonna, sensitivita, gap, baseSimulato, COLONNE, CATEGORIE, ETICHETTA_CATEGORIA, ETICHETTA_COLONNA } from './calcolo.mjs';
+import { nuovaSimulazione, simulazioneEsempio, eEsempio, normalizza, nuovaVoce, nuovaLinea, nuovaTariffa, lineaStandard, nomiLineeStandard, SUGGERIMENTI, nomeFile } from './modello.mjs';
 import {
   modo, salva, elenca, elimina, scegliCartella, supportaCartella, ripristinaCartella,
   scarica, apriFile, salvaBozza, leggiBozza,
@@ -15,6 +15,7 @@ let vista = 'dettagliata';
 let scheda = 'dati';
 let elencoArchivio = [];
 let messaggio = null;
+let ripristino = null;
 
 // --- utilità -----------------------------------------------------------------------
 
@@ -81,19 +82,53 @@ function classeMargine(f, target) {
   return 'p-critico';
 }
 
-function avvisa(testo, tono = 'info') {
-  messaggio = testo ? { testo, tono } : null;
+function avvisa(testo, azione = null) {
+  messaggio = testo ? { testo, azione } : null;
   disegnaMessaggio();
-  if (testo) setTimeout(() => { if (messaggio && messaggio.testo === testo) { messaggio = null; disegnaMessaggio(); } }, 6000);
+  if (testo) {
+    const durata = azione ? 20000 : 6000;
+    setTimeout(() => {
+      if (messaggio && messaggio.testo === testo) { messaggio = null; disegnaMessaggio(); }
+    }, durata);
+  }
 }
 
 function disegnaMessaggio() {
   const c = $('#messaggio');
+  if (!c) return;
   c.textContent = '';
-  if (!messaggio) { c.hidden = true; return; }
-  c.hidden = false;
+  if (!messaggio) { c.hidden = true; c.className = ''; return; }
   c.className = 'avviso';
+  c.hidden = false;
   c.appendChild(h('span', { testo: messaggio.testo }));
+  if (messaggio.azione) {
+    c.appendChild(h('button', {
+      style: 'white-space:nowrap',
+      testo: messaggio.azione.testo,
+      onclick: messaggio.azione.onclick,
+    }));
+  }
+}
+
+/**
+ * Esegue un'azione distruttiva conservando lo stato precedente, e offre di annullarla.
+ * Cancellare una linea o una voce senza via di ritorno costringe a riscrivere tutto a mano.
+ */
+function conAnnulla(descrizione, azione) {
+  const prima = JSON.parse(JSON.stringify(sim));
+  azione();
+  ripristino = prima;
+  disegna();
+  avvisa(descrizione, {
+    testo: 'Annulla',
+    onclick: () => {
+      if (!ripristino) return;
+      sim = normalizza(ripristino);
+      ripristino = null;
+      disegna();
+      avvisa('Ripristinato.');
+    },
+  });
 }
 
 // --- campi ------------------------------------------------------------------------
@@ -163,7 +198,7 @@ function pannelloParametri() {
           h('td', { class: 'n', style: 'width:130px' }, inputNumero(`tariffe.${i}.eurOra`, t.eurOra, { placeholder: 'da impostare' })),
           h('td', { style: 'width:34px' }, h('button', {
             class: 'muto', title: 'Rimuovi tariffa', testo: '×',
-            onclick: () => { sim.tariffe.splice(i, 1); disegna(); },
+            onclick: () => conAnnulla(`Tariffa "${t.nome}" rimossa.`, () => sim.tariffe.splice(i, 1)),
           })))))),
       h('button', {
         style: 'margin-top:8px', testo: '+ tipo di manodopera',
@@ -217,7 +252,7 @@ function rigaVoce(linea, iL, voce, iV) {
     h('td', { class: 'n derivato', 'data-out': 'voce:' + voce.id, testo: '—' }),
     h('td', { style: 'width:34px' }, h('button', {
       class: 'muto', title: 'Rimuovi voce', testo: '×',
-      onclick: () => { linea.voci.splice(iV, 1); disegna(); },
+      onclick: () => conAnnulla(`Voce "${voce.nome || 'senza nome'}" rimossa.`, () => linea.voci.splice(iV, 1)),
     })));
 }
 
@@ -321,7 +356,7 @@ function pannelloLinea(linea, iL) {
       }),
       h('button', {
         class: 'muto', title: 'Rimuovi la linea di servizio', testo: '×',
-        onclick: () => { sim.linee.splice(iL, 1); disegna(); },
+        onclick: () => conAnnulla(`Linea "${linea.nome}" rimossa con le sue ${linea.voci.length} voci.`, () => sim.linee.splice(iL, 1)),
       })),
     vista === 'dettagliata' ? tabellaLineaDettagliata(linea, iL) : tabellaLineaSemplice(linea, iL));
 }
@@ -353,10 +388,31 @@ function schedaDati() {
       }),
       h('span', { class: 'nota', style: 'margin:0', testo: vista === 'semplice' ? 'Nove caselle: tre linee per tre categorie.' : 'Righe per marca fornitore e tipo di manodopera.' })),
     ...sim.linee.map((l, i) => pannelloLinea(l, i)),
-    h('button', {
-      testo: '+ linea di servizio',
-      onclick: () => { sim.linee.push(nuovaLinea('Nuova linea')); disegna(); },
-    }));
+    pannelloAggiungiLinea());
+}
+
+function pannelloAggiungiLinea() {
+  const presenti = new Set(sim.linee.map((l) => l.nome.trim().toLowerCase()));
+  const mancanti = nomiLineeStandard().filter((n) => !presenti.has(n.trim().toLowerCase()));
+  return h('section', { class: 'pannello' },
+    h('h2', { testo: 'Aggiungi una linea di servizio' }),
+    h('div', { class: 'corpo' },
+      h('div', { class: 'azioni' },
+        ...mancanti.map((n) => h('button', {
+          class: 'primario', testo: '+ ' + n,
+          onclick: () => {
+            sim.linee.push(lineaStandard(n, sim.tariffe));
+            disegna();
+            avvisa(`Linea "${n}" aggiunta con le sue voci di default.`);
+          },
+        })),
+        h('button', {
+          testo: '+ linea personalizzata',
+          onclick: () => { sim.linee.push(nuovaLinea('Nuova linea')); disegna(); },
+        })),
+      mancanti.length
+        ? h('p', { class: 'nota', testo: 'Le linee standard tornano complete delle loro voci di default. I valori vanno reinseriti.' })
+        : h('p', { class: 'nota', testo: 'Tutte e tre le linee standard sono presenti.' })));
 }
 
 // --- scheda simulazione ------------------------------------------------------------
@@ -388,6 +444,34 @@ function cursore(etichetta, percorso, valore, uscita) {
     uscita ? h('div', { class: 'esito', 'data-out': uscita, testo: '—' }) : null);
 }
 
+/** Effetto della simulazione, mostrato dove si agisce: senza questo riquadro si muovono i
+ *  cursori e il risultato si vede solo cambiando scheda. */
+function riepilogoSimulazione() {
+  const righe = [
+    ['ricavo', 'euro', 'Ricavo'],
+    ['cd', 'euro', 'Costi diretti'],
+    ['mdc', 'euro', 'Margine di contribuzione'],
+    ['mdcPct', 'perc', 'Marginalità'],
+    ['mi', 'euro', 'Margine industriale'],
+    ['miPct', 'perc', 'Margine industriale %'],
+  ];
+  return h('section', { class: 'pannello' },
+    h('h2', { testo: 'Effetto della simulazione' }),
+    h('div', { class: 'corpo' },
+      h('p', { class: 'nota', style: 'margin-top:0', id: 'base-simulazione', testo: '' }),
+      h('div', { class: 'tabellone' }, h('table', {},
+        h('thead', {}, h('tr', {},
+          h('th', { testo: 'Grandezza' }),
+          h('th', { class: 'n', 'data-out': 'cmp:intestazione', testo: 'Base' }),
+          h('th', { class: 'n', testo: 'Simulato' }),
+          h('th', { class: 'n', testo: 'Variazione' }))),
+        h('tbody', {}, ...righe.map(([k, f, et]) => h('tr', k === 'mdc' || k === 'miPct' ? { class: 'somma' } : {},
+          h('td', { testo: et }),
+          h('td', { class: 'n', 'data-out': `cmp:${k}:base:${f}`, testo: '—' }),
+          h('td', { class: 'n', 'data-out': `cmp:${k}:sim:${f}`, testo: '—' }),
+          h('td', { class: 'n', 'data-out': `cmp:${k}:delta:${f}`, testo: '—' })))))))); 
+}
+
 function schedaSimulazione() {
   const globali = h('div', { class: 'cursori' },
     cursore('Tutti i costi', 'delta.globale', sim.delta.globale),
@@ -403,6 +487,7 @@ function schedaSimulazione() {
           cursore(ETICHETTA_CATEGORIA[c], `delta.catLinea.${l.id}|${c}`, sim.delta.catLinea?.[`${l.id}|${c}`] ?? 0, `catsim:${l.id}:${c}`))))));
 
   return h('div', {},
+    riepilogoSimulazione(),
     h('section', { class: 'pannello' },
       h('h2', { testo: 'Scostamenti complessivi' }),
       h('div', { class: 'corpo' }, globali,
@@ -755,6 +840,29 @@ function aggiornaDerivati() {
   for (const c of COLONNE) scrivi(`barra:mdcpct:${c}`, perc(r.colonne[c].mdcPct));
   scrivi('barra:mi', euro(s.mi));
 
+  const colBase = r.colonne[r.baseSimulazione];
+  const gSim = gap(colBase, s);
+  scrivi('cmp:intestazione', ETICHETTA_COLONNA[r.baseSimulazione]);
+  for (const [k, formato] of [['ricavo', 'euro'], ['cd', 'euro'], ['mdc', 'euro'], ['mdcPct', 'perc'], ['mi', 'euro'], ['miPct', 'perc']]) {
+    scrivi(`cmp:${k}:base:${formato}`, formatta(colBase[k], formato));
+    scrivi(`cmp:${k}:sim:${formato}`, formatta(s[k], formato));
+    if (formato === 'perc') {
+      const pp = (colBase[k] === null || s[k] === null) ? null : (s[k] - colBase[k]) * 100;
+      scrivi(`cmp:${k}:delta:${formato}`, punti(pp), pp === null ? null : (pp >= 0 ? 'v-buono' : 'v-critico'));
+    } else {
+      const d = s[k] - colBase[k];
+      const positivo = k === 'cd' ? d <= 0 : d >= 0;
+      scrivi(`cmp:${k}:delta:${formato}`, euroSegnato(d), positivo ? 'v-buono' : 'v-critico');
+    }
+  }
+  const nb = $('#base-simulazione');
+  if (nb) {
+    nb.textContent = r.baseSimulazione === 'kom'
+      ? 'La simulazione parte dalla colonna KOM. Gli scostamenti non modificano il KOM: creano una terza colonna.'
+      : 'La colonna KOM è ancora vuota, quindi la simulazione parte dal Preventivo. Compilando il KOM la base passa automaticamente a quello.';
+  }
+  void gSim;
+
   const pil = $('#semaforo');
   if (pil) {
     pil.className = 'pillola ' + classeMargine(s.miPct, target);
@@ -808,7 +916,7 @@ function offriTesto(titolo, nomeSuggerito, testo) {
         }),
         h('button', { testo: 'Chiudi', onclick: () => pannello.remove() }))));
   const main = document.querySelector('main');
-  main.insertBefore(pannello, main.children[1] || null);
+  main.insertBefore(pannello, main.firstChild || null);
   area.focus();
   area.select();
 }
@@ -878,9 +986,7 @@ function disegna() {
         + '. Le altre schede e i dati inseriti non sono stati toccati.'));
   }
 
-  const main = h('main', {},
-    h('div', { id: 'messaggio', hidden: true }),
-    contenuto);
+  const main = h('main', {}, contenuto);
 
   radice.appendChild(nav);
   radice.appendChild(main);
@@ -925,6 +1031,7 @@ function datalist() {
 export function avvia() {
   document.body.appendChild(testa());
   document.body.appendChild(h('div', { id: 'radice' }));
+  document.body.appendChild(h('div', { id: 'messaggio', hidden: true }));
   document.body.appendChild(barra());
   document.body.appendChild(datalist());
 

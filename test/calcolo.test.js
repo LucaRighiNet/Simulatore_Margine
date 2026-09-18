@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  calcola, calcolaColonna, costoVoce, fattoreVoce, gap, sensitivita, CATEGORIE,
+  calcola, calcolaColonna, costoVoce, fattoreVoce, gap, sensitivita, baseSimulato, CATEGORIE,
 } from '../src/calcolo.mjs';
 import { nuovaSimulazione, normalizza, nomeFile } from '../src/modello.mjs';
 
@@ -193,4 +193,39 @@ test('il nome file è ordinabile e privo di caratteri problematici', () => {
   assert.match(n, /^C-2026014-speciale_/, 'il codice resta riconoscibile');
   const vuoto = nuovaSimulazione();
   assert.match(nomeFile(vuoto), /^senza-codice_/, 'ricade su un nome valido se il codice manca');
+});
+
+test('se il KOM è vuoto la simulazione poggia sul preventivo', () => {
+  const sim = simMinima({ rPrev: 1000, cPrev: 800, rKom: 0, cKom: 0 });
+  sim.delta = { globale: 25 };
+  assert.equal(baseSimulato(sim), 'preventivo');
+  const s = calcolaColonna(sim, 'simulato');
+  vicino(s.cd, 1000);      // 800 + 25%
+  vicino(s.ricavo, 1000);  // ricavo di preventivo, nessuno scostamento sui ricavi
+  assert.equal(s.base, 'preventivo');
+});
+
+test('appena il KOM ha un valore la simulazione torna a poggiare sul KOM', () => {
+  const sim = simMinima({ rPrev: 1000, cPrev: 800, rKom: 0, cKom: 900 });
+  assert.equal(baseSimulato(sim), 'kom');
+  vicino(calcolaColonna(sim, 'simulato').cd, 900);
+});
+
+test('basta il solo ricavo KOM a spostare la base sul KOM', () => {
+  const sim = simMinima({ rPrev: 1000, cPrev: 800, rKom: 950, cKom: 0 });
+  assert.equal(baseSimulato(sim), 'kom');
+});
+
+test('con KOM vuoto i cursori muovono davvero il margine simulato', () => {
+  const sim = simMinima({ rPrev: 1000, cPrev: 800 });
+  const prima = calcolaColonna(sim, 'simulato').mdc;
+  sim.delta = { globale: 10 };
+  const dopo = calcolaColonna(sim, 'simulato').mdc;
+  assert.notEqual(prima, dopo);
+  vicino(dopo, 1000 - 880);
+});
+
+test('calcola dichiara su quale colonna poggia la simulazione', () => {
+  assert.equal(calcola(simMinima({ rPrev: 1000, cPrev: 800 })).baseSimulazione, 'preventivo');
+  assert.equal(calcola(simMinima({ rKom: 1000, cKom: 800 })).baseSimulazione, 'kom');
 });

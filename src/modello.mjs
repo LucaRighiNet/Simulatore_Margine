@@ -35,7 +35,7 @@ export const SUGGERIMENTI = {
   ],
 };
 
-const LINEE_DEFAULT = [
+export const LINEE_DEFAULT = [
   {
     nome: 'Quadri elettrici',
     voci: [
@@ -91,6 +91,19 @@ export function nuovaTariffa(nome, eurOra = 0) {
 
 export function nuovaLinea(nome) {
   return { id: id('l'), nome, ricavo: { preventivo: 0, kom: 0 }, voci: [] };
+}
+
+/** Nomi delle linee di servizio predefinite, per poterle reinserire dopo una cancellazione. */
+export function nomiLineeStandard() {
+  return LINEE_DEFAULT.map((d) => d.nome);
+}
+
+/** Ricrea una linea standard completa delle sue voci di default. */
+export function lineaStandard(nome, tariffe) {
+  const def = LINEE_DEFAULT.find((d) => d.nome === nome);
+  const l = nuovaLinea(nome);
+  if (def) l.voci = def.voci.map(([cat, n]) => nuovaVoce(cat, n, tariffe));
+  return l;
 }
 
 export function nuovaSimulazione() {
