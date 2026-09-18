@@ -3,7 +3,7 @@
 // (righe, linee, scheda); digitare un numero aggiorna soltanto i valori derivati, per non
 // perdere il fuoco dal campo in cui si sta scrivendo.
 
-import { calcola, calcolaColonna, sensitivita, gap, baseSimulato, COLONNE, CATEGORIE, ETICHETTA_CATEGORIA, ETICHETTA_COLONNA } from './calcolo.mjs';
+import { calcola, calcolaColonna, sensitivita, gap, baseSimulato, incidenze, RIFERIMENTI_INCIDENZA, COLONNE, CATEGORIE, ETICHETTA_CATEGORIA, ETICHETTA_COLONNA } from './calcolo.mjs';
 import { nuovaSimulazione, simulazioneEsempio, eEsempio, normalizza, nuovaVoce, nuovaLinea, nuovaTariffa, lineaStandard, nomiLineeStandard, SUGGERIMENTI, nomeFile } from './modello.mjs';
 import {
   modo, salva, elenca, elimina, scegliCartella, supportaCartella, ripristinaCartella,
@@ -13,6 +13,7 @@ import {
 let sim = nuovaSimulazione();
 let vista = 'dettagliata';
 let scheda = 'dati';
+let riferimentoIncidenza = 'cd';
 let elencoArchivio = [];
 let messaggio = null;
 let ripristino = null;
@@ -552,6 +553,30 @@ function tabellaGap(titolo, chiave, sottotitolo) {
         h('tbody', { 'data-lista': 'perlinea:' + chiave })))));
 }
 
+function pannelloIncidenze() {
+  const spiegazione = riferimentoIncidenza === 'cd'
+    ? 'Quanto pesa ogni voce sui costi diretti: descrive la composizione del costo. Attenzione: uno scostamento applicato a tutte le voci nella stessa misura non muove queste percentuali, perché le proporzioni restano identiche.'
+    : 'Quanto pesa ogni voce sul ricavo: descrive quanta parte della commessa se ne va in quella voce. Si muove per qualunque scostamento. Le voci più il margine di contribuzione fanno 100%.';
+
+  return h('section', { class: 'pannello' },
+    h('h2', { testo: 'Incidenza delle voci e come si sposta' }),
+    h('div', { class: 'corpo' },
+      h('div', { class: 'azioni', style: 'margin-bottom:8px;align-items:center' },
+        h('strong', { style: 'font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)', testo: 'Incidenza su' }),
+        ...Object.entries(RIFERIMENTI_INCIDENZA).map(([k, et]) => h('button', {
+          class: riferimentoIncidenza === k ? 'primario' : '', testo: et,
+          onclick: () => { riferimentoIncidenza = k; disegna(); },
+        }))),
+      h('p', { class: 'nota', style: 'margin-top:0', testo: spiegazione }),
+      h('div', { class: 'tabellone' }, h('table', {},
+        h('thead', {}, h('tr', {},
+          h('th', { testo: 'Voce' }),
+          ...COLONNE.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })),
+          h('th', { class: 'n', testo: 'Prev → KOM' }),
+          h('th', { class: 'n', testo: 'KOM → Sim' }))),
+        h('tbody', { 'data-lista': 'incidenze' })))));
+}
+
 function schedaConfronto() {
   return h('div', {},
     h('section', { class: 'pannello' },
@@ -574,6 +599,7 @@ function schedaConfronto() {
       h('div', { class: 'corpo' },
         h('div', { id: 'cascata' }),
         h('p', { class: 'nota', testo: 'Margine di contribuzione. Le barre intermedie scompongono ogni scostamento in effetto ricavo ed effetto costo.' }))),
+    pannelloIncidenze(),
     tabellaGap('Gap 1 · Preventivo verso KOM', 'gapPreventivoKom',
       'Erosione già avvenuta prima dell’inizio dei lavori: trattativa, sconto di chiusura, ridefinizione del perimetro.'),
     tabellaGap('Gap 2 · KOM verso Simulato', 'gapKomSimulato',
@@ -830,6 +856,27 @@ function aggiornaDerivati() {
           ...CATEGORIE.map((c) => h('td', { class: 'n ' + (l.perCategoria[c] >= 0 ? 'v-buono' : 'v-critico'), testo: euroSegnato(l.perCategoria[c]) })),
           h('td', { class: 'n', style: 'font-weight:600', testo: euroSegnato(l.dMdc) })));
       }
+    }
+  }
+
+  const corpoInc = $('[data-lista="incidenze"]');
+  if (corpoInc) {
+    corpoInc.textContent = '';
+    const { righe } = incidenze(sim, r, riferimentoIncidenza);
+    for (const riga of righe) {
+      const classeRiga = riga.tipo === 'totale' ? 'riga-totale' : riga.tipo === 'margine' ? 'riga-margine' : '';
+      const cellaDelta = (v) => {
+        if (v === null || !Number.isFinite(v)) return h('td', { class: 'n', testo: 'n.d.' });
+        if (Math.abs(v) < 0.05) return h('td', { class: 'n fermo', testo: 'invariata' });
+        // Per un costo, pesare di più è un peggioramento; per il margine è il contrario.
+        const bene = riga.tipo === 'margine' ? v > 0 : v < 0;
+        return h('td', { class: 'n ' + (bene ? 'v-buono' : 'v-critico'), testo: punti(v) });
+      };
+      corpoInc.appendChild(h('tr', classeRiga ? { class: classeRiga } : {},
+        h('td', { class: 'liv' + riga.livello, testo: riga.nome }),
+        ...COLONNE.map((c) => h('td', { class: 'n', testo: perc(riga.valori[c]) })),
+        cellaDelta(riga.dPreventivoKom),
+        cellaDelta(riga.dKomSimulato)));
     }
   }
 

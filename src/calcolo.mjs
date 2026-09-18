@@ -237,3 +237,80 @@ export function sensitivita(sim, ampiezzaPct = 10) {
   righe.sort((x, y) => y.ampiezza - x.ampiezza);
   return { base: partenza, ampiezzaPct, righe };
 }
+
+export const RIFERIMENTI_INCIDENZA = {
+  cd: 'Costi diretti',
+  ricavo: 'Ricavo',
+};
+
+/**
+ * Peso di ogni voce sul totale, colonna per colonna, e sua variazione fra le colonne.
+ *
+ * Il riferimento cambia la domanda a cui si risponde, e le due letture non sono
+ * intercambiabili:
+ *  - 'cd'     quanto pesa la voce sui costi diretti. Descrive la composizione del costo.
+ *             Uno scostamento uniforme su tutte le voci non la muove di un punto.
+ *  - 'ricavo' quanto pesa la voce sul ricavo. Descrive quanto della commessa se ne va in
+ *             quella voce, e si muove per qualunque scostamento. Sommata al margine di
+ *             contribuzione fa 100%.
+ *
+ * Restituisce righe piatte già ordinate e annidate (livello 0 linea, 1 categoria, 2 voce),
+ * pronte per essere stampate, così l'interfaccia non deve ricostruire la gerarchia.
+ */
+export function incidenze(sim, risultato, riferimento = 'cd') {
+  const denom = (col) => (riferimento === 'ricavo' ? col.ricavo : col.cd);
+  const quota = (valore, col) => {
+    const d = denom(col);
+    return d ? valore / d : null;
+  };
+  const perColonna = (fn) => {
+    const o = {};
+    for (const c of COLONNE) o[c] = fn(risultato.colonne[c]);
+    return o;
+  };
+  const pp = (a, b) => (a === null || b === null ? null : (b - a) * 100);
+  const conDelta = (valori) => ({
+    valori,
+    dPreventivoKom: pp(valori.preventivo, valori.kom),
+    dKomSimulato: pp(valori.kom, valori.simulato),
+  });
+
+  const righe = [];
+  for (const linea of sim.linee || []) {
+    const perLinea = (col) => {
+      const l = col.linee.find((x) => x.id === linea.id);
+      return l ? quota(l.cd, col) : null;
+    };
+    righe.push({ livello: 0, tipo: 'linea', id: linea.id, nome: linea.nome || 'Linea', ...conDelta(perColonna(perLinea)) });
+
+    for (const cat of CATEGORIE) {
+      const voci = (linea.voci || []).filter((v) => v.cat === cat);
+      if (voci.length === 0) continue;
+      const perCat = (col) => {
+        const l = col.linee.find((x) => x.id === linea.id);
+        return l ? quota(l.perCategoria[cat] || 0, col) : null;
+      };
+      righe.push({ livello: 1, tipo: 'categoria', id: linea.id + '|' + cat, nome: ETICHETTA_CATEGORIA[cat], ...conDelta(perColonna(perCat)) });
+
+      for (const voce of voci) {
+        const perVoce = (col) => {
+          const l = col.linee.find((x) => x.id === linea.id);
+          return l ? quota(l.voci[voce.id] || 0, col) : null;
+        };
+        righe.push({ livello: 2, tipo: 'voce', id: voce.id, nome: voce.nome || 'senza nome', ...conDelta(perColonna(perVoce)) });
+      }
+    }
+  }
+
+  righe.push({
+    livello: 0, tipo: 'totale', id: '_cd', nome: 'Totale costi diretti',
+    ...conDelta(perColonna((col) => quota(col.cd, col))),
+  });
+  if (riferimento === 'ricavo') {
+    righe.push({
+      livello: 0, tipo: 'margine', id: '_mdc', nome: 'Margine di contribuzione',
+      ...conDelta(perColonna((col) => quota(col.mdc, col))),
+    });
+  }
+  return { riferimento, righe };
+}

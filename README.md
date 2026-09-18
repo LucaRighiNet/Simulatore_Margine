@@ -22,7 +22,8 @@ avviso: serve a far vedere come funziona. Il pulsante "Parti da zero" svuota tut
    colonne Preventivo e KOM.
 2. Simulazione: sposta i cursori. Gli scostamenti si applicano alla colonna KOM e si
    compongono: complessivo, poi linea, poi categoria. Il KOM non viene toccato.
-3. Confronto: le tre colonne affiancate, i due gap, la cascata del margine, la riserva
+3. Confronto: le tre colonne affiancate, i due gap, la cascata del margine, l'incidenza di
+   ogni voce nelle tre colonne con la sua variazione in punti percentuali, la riserva
    residua rispetto al margine obiettivo.
 4. Archivio: salva la simulazione. Ogni salvataggio crea una nuova voce datata.
 

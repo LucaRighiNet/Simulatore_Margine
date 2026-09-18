@@ -195,6 +195,23 @@ relativa del margine -25,3%. Sono tre numeri corretti e diversi che descrivono l
 fatto: presentarne uno solo, o confondere p.p. con %, e' l'errore da cui questo tool deve
 proteggere.
 
+### 2.8bis Incidenza delle voci: due riferimenti, due domande diverse
+
+Il peso di una voce si misura su due denominatori, e le due letture non sono
+intercambiabili. Vanno esposte entrambe, con un selettore esplicito.
+
+| Riferimento | Formula | Domanda a cui risponde | Comportamento sotto scostamento uniforme |
+|---|---|---|---|
+| Costi diretti | costo voce / costi diretti totali | come è composto il costo | non si muove: le proporzioni restano identiche |
+| Ricavo | costo voce / ricavo | quanta parte della commessa se ne va in quella voce | si muove per qualunque scostamento |
+
+La prima è a somma zero: se una voce sale, le altre scendono per costruzione. La seconda
+no, e sommata al margine di contribuzione fa 100%.
+
+Il rischio da evitare è che un PM applichi un aumento a tutte le voci, guardi l'incidenza
+sui costi, veda tutte le righe ferme e concluda che non è cambiato nulla. Per questo il
+pannello dichiara in testa quale riferimento è attivo e cosa comporta.
+
 ### 2.8 Scomposizione del gap: effetto prezzo ed effetto costo
 
 Poiche' ricavo e costi cambiano entrambi fra una colonna e l'altra, il confronto mostra da
@@ -215,6 +232,7 @@ Margine simulato.
 | Riepilogo | Ricavo, costi, MdC euro e %, MI %, per linea e totale | fotografia |
 | Confronto a tre colonne | Preventivo / KOM / Simulato, con i due gap, in euro, in % e in punti percentuali | il confronto richiesto, cuore del tool |
 | Waterfall del margine | cascata da Preventivo a KOM a Simulato, scomposta in effetto ricavo ed effetto costo per linea e categoria | capire da dove nasce lo scostamento |
+| Incidenza delle voci | peso di ogni voce, categoria e linea sul totale, nelle tre colonne, con la variazione in punti percentuali. Riferimento commutabile fra costi diretti e ricavo | vedere quale voce si sta mangiando la commessa, e come la composizione si sposta |
 | Semaforo | scostamento dal margine obiettivo | allerta |
 | Break-even | riserva di costo residua in euro e % | negoziazione |
 | Tornado chart | impatto sul margine di una variazione di +/- X% su ogni driver, ordinato per effetto | capire dove guardare |

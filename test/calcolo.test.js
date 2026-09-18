@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  calcola, calcolaColonna, costoVoce, fattoreVoce, gap, sensitivita, baseSimulato, CATEGORIE,
+  calcola, calcolaColonna, costoVoce, fattoreVoce, gap, sensitivita, baseSimulato, incidenze, CATEGORIE,
 } from '../src/calcolo.mjs';
-import { nuovaSimulazione, normalizza, nomeFile } from '../src/modello.mjs';
+import { nuovaSimulazione, simulazioneEsempio, normalizza, nomeFile } from '../src/modello.mjs';
 
 const vicino = (a, b, tol = 1e-6) =>
   assert.ok(Math.abs(a - b) < tol, `atteso ${b}, ottenuto ${a}`);
@@ -228,4 +228,67 @@ test('con KOM vuoto i cursori muovono davvero il margine simulato', () => {
 test('calcola dichiara su quale colonna poggia la simulazione', () => {
   assert.equal(calcola(simMinima({ rPrev: 1000, cPrev: 800 })).baseSimulazione, 'preventivo');
   assert.equal(calcola(simMinima({ rKom: 1000, cKom: 800 })).baseSimulazione, 'kom');
+});
+
+test('sui costi diretti le incidenze delle voci sommano a 100%', () => {
+  const sim = simulazioneEsempio();
+  const { righe } = incidenze(sim, calcola(sim), 'cd');
+  for (const col of ['preventivo', 'kom', 'simulato']) {
+    const somma = righe.filter((r) => r.tipo === 'voce').reduce((s, r) => s + r.valori[col], 0);
+    vicino(somma, 1, 1e-9);
+  }
+});
+
+test('sul ricavo le voci piu il margine di contribuzione sommano a 100%', () => {
+  const sim = simulazioneEsempio();
+  const { righe } = incidenze(sim, calcola(sim), 'ricavo');
+  for (const col of ['preventivo', 'kom', 'simulato']) {
+    const voci = righe.filter((r) => r.tipo === 'voce').reduce((s, r) => s + r.valori[col], 0);
+    const mdc = righe.find((r) => r.tipo === 'margine').valori[col];
+    vicino(voci + mdc, 1, 1e-9);
+  }
+});
+
+test('le categorie sommano alla loro linea e le linee al totale', () => {
+  const sim = simulazioneEsempio();
+  const { righe } = incidenze(sim, calcola(sim), 'cd');
+  const linee = righe.filter((r) => r.tipo === 'linea');
+  vicino(linee.reduce((s, r) => s + r.valori.kom, 0), 1, 1e-9);
+  // la prima linea: somma delle sue categorie
+  const primaLinea = sim.linee[0];
+  const cat = righe.filter((r) => r.tipo === 'categoria' && r.id.startsWith(primaLinea.id + '|'));
+  vicino(cat.reduce((s, r) => s + r.valori.kom, 0), linee[0].valori.kom, 1e-9);
+});
+
+test('uno scostamento uniforme non muove le incidenze sui costi ma muove quelle sul ricavo', () => {
+  const sim = simulazioneEsempio();
+  sim.delta = { ricavo: 0, ricavoLinea: {}, globale: 12, linea: {}, catLinea: {}, voce: {} };
+  const r = calcola(sim);
+
+  const suCosti = incidenze(sim, r, 'cd').righe.filter((x) => x.tipo === 'voce');
+  for (const riga of suCosti) vicino(riga.dKomSimulato, 0, 1e-9);
+
+  const suRicavo = incidenze(sim, r, 'ricavo').righe.filter((x) => x.tipo === 'voce');
+  assert.ok(suRicavo.some((x) => Math.abs(x.dKomSimulato) > 0.01),
+    'sul ricavo almeno una voce deve muoversi');
+});
+
+test('uno scostamento su una sola categoria ne aumenta il peso sui costi e riduce gli altri', () => {
+  const sim = simulazioneEsempio();
+  const chiave = sim.linee[0].id + '|materiale';
+  sim.delta = { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: { [chiave]: 20 }, voce: {} };
+  const righe = incidenze(sim, calcola(sim), 'cd').righe;
+  const colpita = righe.find((r) => r.tipo === 'categoria' && r.id === chiave);
+  assert.ok(colpita.dKomSimulato > 0, 'la categoria toccata deve pesare di piu');
+  const altra = righe.find((r) => r.tipo === 'categoria' && r.id !== chiave);
+  assert.ok(altra.dKomSimulato < 0, 'le altre devono pesare di meno');
+});
+
+test('con denominatore nullo l incidenza è n.d. e non infinito', () => {
+  const sim = simMinima({ rPrev: 0, cPrev: 0, rKom: 0, cKom: 0 });
+  const righe = incidenze(sim, calcola(sim), 'cd').righe;
+  for (const r of righe) {
+    for (const v of Object.values(r.valori)) assert.equal(v, null);
+    assert.equal(r.dPreventivoKom, null);
+  }
 });
