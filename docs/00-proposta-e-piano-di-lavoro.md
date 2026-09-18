@@ -138,16 +138,82 @@ compongono in modo moltiplicativo dal generale al particolare:
 Questo è il cuore del tool: il baseline resta intatto e sempre confrontabile, e il PM
 ragiona per leve ("materiale quadri +8%", "ore cantiere +15%") invece che per importi.
 
-### 2.5 Output
+### 2.5 I tre baseline a confronto
+
+Il modello non ha un solo baseline ma tre istanze della stessa struttura dati, confrontate
+affiancate:
+
+| Colonna | Che cos'e' | Chi la inserisce | Quando si congela |
+|---|---|---|---|
+| Preventivo | marginalita' stimata in fase di offerta | commerciale / ufficio preventivi | alla presentazione dell'offerta |
+| KOM | budget esecutivo concordato al kick off meeting, dopo acquisizione ordine | PM con controllo di gestione | al KOM, e non si tocca piu' |
+| Simulato | scenario what-if corrente | PM, in autonomia | mai, e' lo scenario di lavoro |
+
+Regola di derivazione: gli scostamenti percentuali della simulazione si applicano alla
+colonna KOM, che e' il budget di cui il PM risponde. Se il KOM non e' ancora stato fatto,
+il simulato deriva dal Preventivo e l'interfaccia lo dichiara esplicitamente.
+
+Le colonne Preventivo e KOM hanno ciascuna il proprio ricavo, non solo i propri costi. E'
+un punto non negoziabile: fra offerta e ordine il prezzo cambia quasi sempre (sconto di
+chiusura, varianti, revisione perimetro). Se si forzasse un ricavo unico, una perdita di
+margine dovuta a una concessione di prezzo verrebbe attribuita ai costi, e il PM
+inseguirebbe un problema che non esiste.
+
+### 2.6 I due gap, che rispondono a domande diverse
+
+| Gap | Formula | Domanda a cui risponde | Chi ne risponde |
+|---|---|---|---|
+| Preventivo → KOM | erosione gia' avvenuta prima di iniziare i lavori | quanto margine abbiamo perso in trattativa e in ridefinizione del perimetro | commerciale e direzione |
+| KOM → Simulato | erosione prospettica in esecuzione | dove sta andando la commessa rispetto al budget di cui rispondo | PM |
+
+Tenerli separati e' il motivo per cui servono tre colonne e non due. Un tool che mostra solo
+"preventivo contro attuale" fa apparire il PM responsabile di uno sconto commerciale deciso
+prima che la commessa esistesse.
+
+### 2.7 Confronto in valore assoluto e in percentuale: due percentuali diverse
+
+Avvertenza di calcolo. "Confronto in percentuale" ha due significati distinti e non
+intercambiabili. Vanno mostrati entrambi, con etichette esplicite:
+
+| Grandezza | Formula | Unita' | Lettura |
+|---|---|---|---|
+| Margine assoluto | MdC in euro per colonna | euro | quanto margine c'e' |
+| Marginalita' | MdC / Ricavo della stessa colonna | % | quanto e' redditizia la commessa |
+| Variazione assoluta | MdC_b - MdC_a | euro | quanti euro di margine si sono persi |
+| Variazione della marginalita' | MdC%_b - MdC%_a | punti percentuali (p.p.) | di quanto e' peggiorata la redditivita' |
+| Variazione relativa del margine | (MdC_b - MdC_a) / MdC_a | % | quanta parte del margine si e' bruciata |
+
+Esempio numerico per fissare la differenza. Preventivo: ricavo 1.000.000, MdC 180.000,
+marginalita' 18,0%. KOM: ricavo 960.000, MdC 134.400, marginalita' 14,0%.
+Variazione assoluta -45.600 euro; variazione della marginalita' -4,0 p.p.; variazione
+relativa del margine -25,3%. Sono tre numeri corretti e diversi che descrivono lo stesso
+fatto: presentarne uno solo, o confondere p.p. con %, e' l'errore da cui questo tool deve
+proteggere.
+
+### 2.8 Scomposizione del gap: effetto prezzo ed effetto costo
+
+Poiche' ricavo e costi cambiano entrambi fra una colonna e l'altra, il confronto mostra da
+dove nasce lo scostamento del margine assoluto:
+
+    delta MdC = (R_b - R_a) - (CD_b - CD_a)
+                 effetto ricavo    effetto costo
+
+L'effetto costo viene ulteriormente scomposto per linea di servizio e per categoria
+(materiale, manodopera, altri), in modo che la somma dei contributi quadri con il totale.
+Rappresentazione: grafico a cascata (waterfall) da Margine preventivo a Margine KOM a
+Margine simulato.
+
+### 2.9 Output
 
 | Output | Contenuto | A cosa serve |
 |---|---|---|
 | Riepilogo | Ricavo, costi, MdC euro e %, MI %, per linea e totale | fotografia |
-| Confronto scenari | colonne Base / Simulato / Delta affiancate | decisione |
+| Confronto a tre colonne | Preventivo / KOM / Simulato, con i due gap, in euro, in % e in punti percentuali | il confronto richiesto, cuore del tool |
+| Waterfall del margine | cascata da Preventivo a KOM a Simulato, scomposta in effetto ricavo ed effetto costo per linea e categoria | capire da dove nasce lo scostamento |
 | Semaforo | scostamento dal margine obiettivo | allerta |
 | Break-even | riserva di costo residua in euro e % | negoziazione |
 | Tornado chart | impatto sul margine di una variazione di +/- X% su ogni driver, ordinato per effetto | capire dove guardare |
-| Scenari salvati | Base, Best, Worst affiancati | riunione di avanzamento |
+| Scenari salvati | Simulato Base, Best, Worst, confrontabili contro Preventivo e KOM | riunione di avanzamento |
 
 Il tornado chart risponde alla domanda operativa: fra tutte le variabili, quale mi fa più
 male se sbaglio la stima. È lo strumento standard per questo tipo di analisi.
@@ -170,8 +236,14 @@ Schermata unica con quattro zone:
    rinominabile in linea.
 3. Barra risultati fissa in basso, sempre visibile durante l'inserimento: Ricavo, Costi,
    MdC euro, MdC %, MI %, semaforo.
-4. Pannello simulazione: slider per driver, tabella Base/Simulato/Delta, tornado chart,
-   scenari salvati.
+4. Pannello simulazione: slider per driver, tornado chart, scenari salvati.
+5. Pannello confronto: le tre colonne Preventivo / KOM / Simulato affiancate, con i due gap
+   in euro, in percentuale e in punti percentuali, e il waterfall del margine.
+
+Selettore di colonna attiva in testata (Preventivo, KOM, Simulato): determina quale delle
+tre istanze si sta compilando. Preventivo e KOM, una volta congelati, diventano di sola
+lettura con uno sblocco esplicito, per evitare che il budget di riferimento venga
+riscritto a posteriori.
 
 ### 3.2 Vista semplice e vista dettagliata
 
@@ -187,6 +259,18 @@ righe di dettaglio la casella aggregata diventa di sola lettura e si può agire 
 scostamento percentuale, per evitare incoerenze tra i due livelli.
 
 ---
+
+### 3.3 Come si popolano tre colonne senza triplicare il lavoro di inserimento
+
+Il rischio dell'aggiunta delle tre colonne e' che il PM debba inserire tre volte la stessa
+struttura. Mitigazioni previste:
+
+| Meccanismo | Effetto |
+|---|---|
+| Duplica colonna | il KOM nasce come copia del Preventivo, il PM modifica solo le righe cambiate |
+| Evidenza delle righe modificate | marcatore sulle sole voci che differiscono dalla colonna di origine |
+| Colonna Preventivo opzionale | se l'offerta non e' disponibile in forma analitica, si inserisce il solo totale di riga o il solo margine di offerta, e il confronto resta possibile al livello disponibile |
+| Simulato sempre derivato | non si inserisce mai a mano: e' KOM piu' scostamenti percentuali |
 
 ## 4. Architettura: opzioni a confronto
 
@@ -228,32 +312,48 @@ si paga isolando il motore di calcolo e testandolo.
 |---|---|---|---|---|
 | 0 | Allineamento: definizione di margine, perimetro costi, tariffe orarie, fonte del baseline | documento di specifica confermato | 0,5 gg | richiede risposte dal committente |
 | 1 | Motore di calcolo e test | modulo calcolo + suite di test | 1 gg | dipende da fase 0 |
-| 2 | Interfaccia di inserimento baseline, vista semplice e dettagliata | schermata funzionante | 1,5 gg | |
-| 3 | Simulatore: scostamenti, scenari, confronto | pannello simulazione | 1 gg | |
-| 4 | Output: riepiloghi, break-even, tornado, export | reportistica | 1 gg | |
-| 5 | Personalizzazione voci, salvataggio, condivisione | gestione righe e persistenza | 0,5-1 gg | |
-| 6 | Pilota su 2 commesse reali con 2 PM, taratura | versione tarata + note d'uso | 1 settimana di calendario | richiede disponibilità PM |
+| 2 | Interfaccia di inserimento, vista semplice e dettagliata | schermata funzionante | 1,5 gg | |
+| 3 | Gestione delle tre colonne Preventivo / KOM / Simulato, duplica colonna, congelamento | modello a tre istanze | 1 gg | |
+| 4 | Simulatore: scostamenti percentuali componibili, scenari Base/Best/Worst | pannello simulazione | 1 gg | |
+| 5 | Confronto e scomposizione: tabella a tre colonne con i due gap, waterfall, tornado, break-even, export | reportistica | 1,5 gg | |
+| 6 | Personalizzazione voci, salvataggio, condivisione | gestione righe e persistenza | 0,5-1 gg | |
+| 7 | Pilota su 2 commesse reali con 2 PM, taratura | versione tarata + note d'uso | 1 settimana di calendario | richiede disponibilità PM |
 
-Totale sviluppo: 5,5-6,5 giornate/uomo, più una settimana di calendario per il pilota.
+Totale sviluppo: 6,5-7,5 giornate/uomo, più una settimana di calendario per il pilota.
 La stima non include eventuale integrazione con il gestionale.
 
-Ordine di priorità se il tempo si riduce: fasi 1, 2, 4 sono il minimo utilizzabile; la fase
-3 è ciò che distingue un simulatore da un foglio di calcolo; la fase 5 è rifinitura.
+Ordine di priorità se il tempo si riduce: fasi 1, 2, 3 e la sola tabella di confronto della
+fase 5 sono il minimo utilizzabile; la fase 4 è ciò che distingue un simulatore da un
+foglio di calcolo; waterfall, tornado e fase 6 sono rifinitura.
 
 ---
 
-## 6. Decisioni richieste prima di iniziare
+## 6. Decisioni
 
-1. Definizione di margine da adottare: contribuzione, industriale, o entrambi a cascata.
-2. Ricavo: valore unico di commessa o ripartito per linea di servizio.
-3. Tipo di contratto prevalente: a corpo o a misura (determina se il ricavo è fisso nella simulazione).
-4. Inclusione della categoria "Altri costi diretti" nella versione 1.
-5. Tariffe orarie per tipo di manodopera: chi le fornisce e con quale validità.
-6. Percentuale di spese generali oggi in uso e sua base di calcolo (sui costi diretti o sul ricavo).
-7. Dove nasce il budget di commessa oggi: preventivo commerciale, gestionale, foglio del PM.
-8. Numero di PM che useranno il tool e se serve confronto tra commesse (determina se la fase 2 architetturale è necessaria).
+### 6.1 Confermate (2026-09-18)
 
----
+| # | Decisione | Scelta | Conseguenza sul modello |
+|---|---|---|---|
+| 1 | Definizione di margine | Entrambi a cascata | Il calcolo espone Margine di contribuzione (R - CD) e, sotto, Margine industriale (R - CD - SG - CTG). Due righe di risultato, una sola schermata |
+| 2 | Ricavo | Ripartito per linea di servizio | Ogni linea ha il proprio campo ricavo e il proprio MdC%. Il totale commessa e' la somma |
+| 3 | Perimetro costi v1 | Include "Altri costi diretti" | Tre categorie per linea: Materiale, Manodopera, Altri costi diretti. Chi non la usa la lascia a zero |
+| 4 | Persistenza dati | Solo browser piu' file | Nessun backend, nessun login. localStorage per il lavoro in corso, export/import JSON, export CSV/Excel. Architettura opzione A |
+| 5 | Confronto richiesto | Tre colonne: Preventivo, KOM, Simulato | Il modello dati diventa tre istanze della stessa struttura. Confronto in euro, in % di marginalita' e in punti percentuali, piu' scomposizione effetto ricavo / effetto costo. Effort v1: piu' 1 gg |
+
+### 6.2 Aperte, con assunzione adottata in attesa di risposta
+
+Nessuna di queste blocca lo sviluppo: sono tutte parametriche e modificabili in schermata.
+Le assunzioni sono dichiarate qui per essere smentite, non per essere date per buone.
+
+| # | Punto aperto | Assunzione adottata in v1 | Cosa cambia se l'assunzione e' sbagliata |
+|---|---|---|---|
+| 5 | Tipo di contratto prevalente | Contratto a corpo: il ricavo di linea resta fisso durante la simulazione | Se prevale il contratto a misura serve un interruttore per linea che leghi il ricavo alle quantita'. Impatto: mezza giornata, da prevedere in fase 3 |
+| 6 | Tariffe orarie per tipo di manodopera | Campi parametrici in schermata, precompilati con valori segnaposto visibilmente marcati come da sostituire. Nessun valore inventato e' trattato come reale | Nessun impatto strutturale. Impatto sull'attendibilita' dei risultati: totale. E' il rischio numero uno del progetto |
+| 7 | Percentuale spese generali e sua base | Parametro in schermata, applicato sui costi diretti, default vuoto e non precompilato | Se la base aziendale e' il ricavo e non i costi diretti, cambia una formula e l'etichetta. Impatto: trascurabile se deciso prima della fase 1 |
+| 8 | Origine del budget di commessa (preventivo commerciale, gestionale, foglio del PM) | Inserimento manuale del baseline, piu' import da CSV con mappatura colonne | Se esiste un export strutturato dal gestionale, l'import va tarato su quel tracciato. Impatto: da mezza a una giornata in fase 5 |
+| 9 | Numero di PM utilizzatori e necessita' di confronto fra commesse | Uso individuale, nessun consolidamento | Se serve confronto storico fra commesse si passa all'opzione architetturale B, valutata dopo il pilota |
+| 10 | Disponibilita' del preventivo in forma analitica per linea e categoria | Colonna Preventivo compilabile a livello aggregato se il dettaglio non esiste | Se il preventivo e' disponibile solo come margine complessivo, il gap Preventivo → KOM resta calcolabile ma non scomponibile per linea |
+| 11 | Chi congela il KOM e con quale autorita' | Congelamento lato PM, con sblocco esplicito e tracciato in locale | Se il congelamento deve essere validato dal controllo di gestione serve un flusso di approvazione, che implica l'opzione architetturale B |
 
 ## 7. Rischi
 
@@ -269,7 +369,10 @@ Ordine di priorità se il tempo si riduce: fasi 1, 2, 4 sono il minimo utilizzab
 
 ## 8. Fuori perimetro (versione 1)
 
-- Consuntivazione ore e avanzamento lavori.
+- Consuntivazione ore e avanzamento lavori. Di conseguenza non esiste una quarta colonna
+  "Consuntivo" o "EAC": il simulato è una stima del PM, non un dato di contabilità di
+  commessa. È l'estensione naturale del tool ed è l'unica che richiederebbe l'integrazione
+  con il gestionale.
 - Fatturazione, SAL, stati avanzamento.
 - Gestione fornitori e ordini.
 - Integrazione con ERP o gestionale.
