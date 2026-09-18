@@ -296,6 +296,64 @@ struttura. Mitigazioni previste:
 | Simulato sempre derivato | non si inserisce mai a mano: è KOM più scostamenti percentuali |
 | Parti da una simulazione esistente | si apre una simulazione dall'archivio, si cambiano i numeri, si salva come nuova. Nessun template da mantenere |
 
+## 3.4 Progressione del dettaglio e uso da telefono
+
+### 3.4.1 Tre livelli invece di due viste
+
+L'operatore parte da una maschera minima e aggiunge dettaglio solo quando gli serve, con
+pulsanti espliciti. Il livello cambia cosa è visibile, mai cosa è memorizzato.
+
+| Livello | Colonne di input | Categorie | Dettaglio | Numeri da inserire |
+|---|---|---|---|---|
+| Base | solo KOM | Materiale, Manodopera | somme per categoria | 9 |
+| Intermedio | Preventivo e KOM | tutte e tre | somme per categoria | 24 |
+| Completo | Preventivo e KOM | tutte e tre | righe per voce, tariffe orarie | variabile |
+
+Due vincoli non negoziabili sulla progressione:
+
+1. Nascondere non deve mai falsare. Una categoria portata a zero resta fuori dal livello
+   Base, ma appena è valorizzata ricompare: un costo che sta abbassando il margine a
+   schermo non può essere invisibile.
+2. Una somma non modificabile deve dire come si modifica. Dove il livello impedisce di
+   toccare una cifra, accanto c'è il pulsante che porta al livello dove si può.
+
+### 3.4.2 Manodopera: ore o importo, dichiarato
+
+Al livello Base la manodopera si inserisce in euro, così non serve impostare le tariffe
+orarie per ottenere un primo margine. Nel livello Completo ogni riga si commuta in ore per
+tariffa, che è la forma necessaria per simulare uno sforo di ore.
+
+La modalità è un dato esplicito della riga, non dedotta dalla presenza di una tariffa.
+Prima lo era, e una riga di manodopera priva di tariffa costava zero in silenzio: è il modo
+peggiore di sbagliare un margine.
+
+### 3.4.3 Spiegazione dei calcoli
+
+Ogni cella calcolata espone come è stata ottenuta: valori di partenza, formula, scostamenti
+applicati. Si apre al tocco, non al passaggio sopra.
+
+Motivo tecnico, non stilistico: sul touch l'evento di hover non esiste. Su iOS il primo
+tocco su un elemento con stile hover lo attiva soltanto, e serve un secondo tocco per
+agire. Una funzione costruita sull'hover sarebbe inutilizzabile proprio sul dispositivo per
+cui è stata chiesta. Sul desktop lo stesso testo resta disponibile come suggerimento del
+browser.
+
+### 3.4.4 Uso da smartphone
+
+Nella scheda Confronto le tabelle si ricompongono in blocchi verticali sotto i 700 px:
+ogni riga diventa un riquadro e ogni numero porta la propria etichetta accanto. Nessuna
+tabella scorre di lato, verificato alle larghezze degli iPhone in circolazione: 375, 390,
+393, 402, 430, 440 px.
+
+| Vincolo iOS | Conseguenza | Come è gestito |
+|---|---|---|
+| Safari non espone il selettore di cartelle, e su iOS tutti i browser usano lo stesso motore | l'archivio su cartella di rete è impossibile da iPhone e iPad, anche con Chrome o Edge | da telefono restano memoria del browser e Apri/Salva file; la guida lo dichiara e la scheda Archivio lo segnala |
+| Sotto i 16 px iOS ingrandisce la pagina al primo tocco su un campo e non la rimpicciolisce più | la maschera diventa inutilizzabile dopo il primo tocco | i campi passano a 16 px sui dispositivi a tocco |
+| Aree di tocco piccole | errori di battitura sui pulsanti | altezza minima 38 px sui dispositivi a tocco, 44 px sulle schede |
+
+Indicazione d'uso che ne deriva: il telefono è adatto al livello Base e alla rilettura del
+confronto; il budget esecutivo al livello Completo si compila da computer.
+
 ## 4. Archivio delle simulazioni
 
 Requisito: nessuna storicizzazione, nessun consuntivo da aggiornare nel tempo, solo un

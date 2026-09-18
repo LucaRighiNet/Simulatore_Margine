@@ -267,18 +267,166 @@ svg text { fill: var(--ink-2); font-family: var(--sans); }
 svg .asse { stroke: var(--linea-forte); }
 svg .griglia { stroke: var(--linea); }
 
-@media (max-width: 720px) {
-  main { padding: 12px; padding-bottom: 150px; }
-  .metrica { min-width: 66px; }
-  .metrica .val { font-size: 13px; }
-  .metrica.forte .val { font-size: 15px; }
-}
+
 
 @media print {
   .testa, .schede, .barra, .azioni, button { display: none !important; }
   main { padding: 0; padding-bottom: 0; }
   .pannello { break-inside: avoid; box-shadow: none; }
   body { background: #fff; }
+}
+
+
+/* --- scelta del livello di dettaglio --- */
+.pannello-livello .corpo { padding-top: 10px; padding-bottom: 10px; }
+.scelta-livello { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.et-livello {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-3); font-weight: 600;
+}
+.gruppo-bottoni { display: flex; flex-wrap: wrap; gap: 4px; }
+button.espandi { border-style: dashed; color: var(--accento); border-color: var(--accento); }
+button.espandi:hover { background: var(--accento-tenue); }
+button.commuta {
+  font-size: 10.5px; border: 1px solid var(--linea); border-radius: 99px;
+  padding: 1px 8px; color: var(--ink-3);
+}
+button.commuta:hover { color: var(--accento); border-color: var(--accento); }
+td.azione-riga, th.azione-riga { width: 34px; }
+
+/* --- spiegazione del calcolo --- */
+.spiegabile {
+  cursor: help;
+  border-bottom: 1px dashed var(--linea-forte);
+  -webkit-tap-highlight-color: transparent;
+}
+.spiegabile.aperta { background: var(--accento-tenue); border-bottom-color: var(--accento); }
+.spiegabile:focus-visible { outline: 2px solid var(--accento); outline-offset: 1px; }
+
+#spiegazione {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  width: min(560px, calc(100% - 24px));
+  background: var(--surface);
+  border: 1px solid var(--accento);
+  border-radius: 8px;
+  box-shadow: 0 10px 34px rgba(23, 33, 44, .26);
+  padding: 10px 12px;
+}
+.titolo-spiega {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  font-weight: 600; font-size: 12.5px; margin-bottom: 5px;
+}
+.corpo-spiega {
+  font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- guida --- */
+.guida p { margin: 0 0 10px; max-width: 68ch; }
+.guida p:last-child { margin-bottom: 0; }
+.guida-elenco { margin: 4px 0 10px; display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 6px 16px; }
+.guida-elenco dt { font-weight: 600; font-size: 12.5px; }
+.guida-elenco dd { margin: 0; color: var(--ink-2); font-size: 13px; max-width: 62ch; }
+
+/* --- larghezza telefono --- */
+@media (max-width: 700px) {
+  main { padding: 12px; padding-bottom: 130px; }
+
+  /* Le schede vanno a capo invece di scorrere: una scheda fuori vista è una scheda che
+     l'operatore non sa di avere. */
+  .schede { flex-wrap: wrap; overflow-x: visible; padding: 0 8px 4px; }
+  .schede button { white-space: normal; padding: 9px 10px; }
+
+  /* Testata compatta: su uno schermo alto 844 punti la sola intestazione non può
+     prendersene 110. */
+  .testa { padding: 8px 12px; gap: 6px 10px; }
+  .marchio { flex: 1 1 100%; gap: 6px; }
+  .marchio strong { font-size: 13.5px; }
+  .marchio span { font-size: 9px; padding-left: 6px; }
+  .testa .azioni { flex: 1 1 100%; }
+  .testa .azioni button { flex: 1 1 auto; font-size: 12px; padding: 7px 8px; min-height: 36px; }
+  .guida-elenco { grid-template-columns: 1fr; gap: 2px; }
+  .guida-elenco dd { margin-bottom: 8px; }
+
+  /* Le tabelle si ricompongono in blocchi verticali: ogni numero porta con sé la propria
+     etichetta, così non serve mai scorrere di lato per leggere una cifra. */
+  .tabellone { overflow-x: visible; }
+  table.tab-confronto, table.tab-dati,
+  table.tab-confronto tbody, table.tab-dati tbody,
+  table.tab-confronto tr, table.tab-dati tr,
+  table.tab-confronto td, table.tab-dati td { display: block; width: 100%; }
+  table.tab-confronto thead, table.tab-dati thead { display: none; }
+
+  table.tab-confronto tr, table.tab-dati tr {
+    border: 1px solid var(--linea);
+    border-radius: var(--r);
+    padding: 7px 10px;
+    margin-bottom: 8px;
+    background: var(--surface);
+  }
+  table.tab-confronto td, table.tab-dati td {
+    border: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 3px 0;
+    text-align: right;
+    white-space: normal;
+  }
+  table.tab-confronto td::before, table.tab-dati td::before {
+    content: attr(data-et);
+    flex: 0 1 auto;
+    text-align: left;
+    color: var(--ink-3);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    font-family: var(--sans);
+    white-space: nowrap;
+  }
+  table.tab-confronto td:first-child, table.tab-dati td:first-child {
+    display: block;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 1px solid var(--linea);
+    margin-bottom: 5px;
+    padding-bottom: 5px;
+  }
+  table.tab-confronto td:first-child::before, table.tab-dati td:first-child::before { content: none; }
+  table.tab-dati td.azione-riga { justify-content: flex-end; padding-top: 4px; }
+  table.tab-dati td.azione-riga::before { content: none; }
+  table.tab-dati td.azione-riga:empty { display: none; }
+  table.tab-dati .coppia { flex: 1 1 auto; justify-content: flex-end; }
+  table.tab-dati td input { max-width: 190px; }
+  table.tab-dati tr.cat td { border-radius: var(--r); }
+  table.tab-confronto tr.somma td:first-child,
+  table.tab-dati tr.somma td:first-child { border-bottom-color: var(--linea-forte); }
+  table.tab-incidenze td.liv1 { padding-left: 12px; }
+  table.tab-incidenze td.liv2 { padding-left: 24px; }
+
+  /* Barra risultati compatta: su uno schermo stretto sei metriche mangiano mezzo schermo. */
+  .barra { gap: 4px 14px; padding: 6px 12px; }
+  .barra .metrica.secondaria { display: none; }
+  .metrica { min-width: 0; }
+  .metrica .et { font-size: 9px; }
+  .metrica .val { font-size: 14px; }
+  .metrica.forte .val { font-size: 16px; }
+}
+
+/* --- dispositivi a tocco --- */
+@media (pointer: coarse) {
+  /* Sotto i 16px iOS ingrandisce la pagina appena si tocca un campo, e non la rimpicciolisce
+     più. Non è una preferenza estetica: è l'unico modo per evitare quello zoom. */
+  input, select, textarea { font-size: 16px; }
+  button { min-height: 38px; padding: 8px 12px; }
+  button.muto { min-height: 34px; }
+  button.commuta { min-height: 26px; }
+  .schede button { min-height: 44px; }
+  .spiegabile { border-bottom-style: dashed; }
 }
 </style>
 <script>
@@ -313,10 +461,23 @@ const num = (v) => {
 // Internamente si lavora in frazioni.
 const frazione = (v) => num(v) / 100;
 
+/**
+ * Come si inserisce una voce di manodopera. In ore per tariffa oraria quando la tariffa
+ * aziendale è nota, ed è la forma che permette di simulare uno sforo di ore; a importo
+ * quando si sta facendo una stima rapida e le tariffe non sono ancora state impostate.
+ * Senza questa distinzione una riga di manodopera priva di tariffa costerebbe zero in
+ * silenzio, che è il modo peggiore di sbagliare un margine.
+ */
+function modoManodopera(voce) {
+  if (voce.modo === 'ore' || voce.modo === 'importo') return voce.modo;
+  return voce.tariffaId ? 'ore' : 'importo';
+}
+
 /** Costo di una singola voce nella colonna indicata, prima degli scostamenti. */
 function costoVoce(voce, colonna, tariffe) {
   const d = voce[colonna] || {};
   if (voce.cat === 'manodopera') {
+    if (modoManodopera(voce) === 'importo') return num(d.q);
     const t = (tariffe || []).find((x) => x.id === voce.tariffaId);
     return num(d.q) * num(t && t.eurOra);
   }
@@ -641,40 +802,13 @@ const SUGGERIMENTI = {
   ],
 };
 
-const LINEE_DEFAULT = [
-  {
-    nome: 'Quadri elettrici',
-    voci: [
-      ['materiale', 'Componenti elettrici'],
-      ['materiale', 'Carpenteria e quadro'],
-      ['materiale', 'Cavi e minuteria'],
-      ['manodopera', 'Produzione e cablaggio'],
-      ['manodopera', 'Ingegneria elettrica'],
-      ['manodopera', 'Ingegneria software'],
-      ['altri', 'Trasporti e logistica'],
-    ],
-  },
-  {
-    nome: 'Installazione cantiere',
-    voci: [
-      ['materiale', 'Materiale di installazione'],
-      ['manodopera', 'Montaggio in cantiere'],
-      ['altri', 'Trasferte e viaggi'],
-      ['altri', 'Vitto e alloggio'],
-      ['altri', 'Noleggi'],
-      ['altri', 'Subappalti e terzisti'],
-    ],
-  },
-  {
-    nome: 'Commissioning',
-    voci: [
-      ['manodopera', 'Messa in servizio'],
-      ['manodopera', 'Ingegneria software'],
-      ['altri', 'Trasferte e viaggi'],
-      ['altri', 'Vitto e alloggio'],
-    ],
-  },
-];
+const NOMI_LINEE = ['Quadri elettrici', 'Installazione cantiere', 'Commissioning'];
+
+const ETICHETTA_CAT = {
+  materiale: 'Materiale',
+  manodopera: 'Manodopera',
+  altri: 'Altri costi diretti',
+};
 
 function nuovaVoce(cat, nome, tariffe) {
   const v = {
@@ -687,6 +821,7 @@ function nuovaVoce(cat, nome, tariffe) {
   if (cat === 'manodopera') {
     const t = (tariffe || []).find((x) => x.nome === nome);
     v.tariffaId = t ? t.id : null;
+    v.modo = t ? 'ore' : 'importo';
   }
   return v;
 }
@@ -699,26 +834,23 @@ function nuovaLinea(nome) {
   return { id: id('l'), nome, ricavo: { preventivo: 0, kom: 0 }, voci: [] };
 }
 
-/** Nomi delle linee di servizio predefinite, per poterle reinserire dopo una cancellazione. */
-function nomiLineeStandard() {
-  return LINEE_DEFAULT.map((d) => d.nome);
+/**
+ * Struttura minima di una linea: una sola voce per categoria. È il livello a cui si parte,
+ * dove per compilare una commessa bastano nove numeri in tutto. Il dettaglio per marca e
+ * per tipo di manodopera si aggiunge dopo, se serve.
+ */
+function lineaStandard(nome, tariffe) {
+  const l = nuovaLinea(nome);
+  l.voci = ['materiale', 'manodopera', 'altri'].map((c) => nuovaVoce(c, ETICHETTA_CAT[c], tariffe));
+  return l;
 }
 
-/** Ricrea una linea standard completa delle sue voci di default. */
-function lineaStandard(nome, tariffe) {
-  const def = LINEE_DEFAULT.find((d) => d.nome === nome);
-  const l = nuovaLinea(nome);
-  if (def) l.voci = def.voci.map(([cat, n]) => nuovaVoce(cat, n, tariffe));
-  return l;
+function nomiLineeStandard() {
+  return NOMI_LINEE.slice();
 }
 
 function nuovaSimulazione() {
   const tariffe = TARIFFE_DEFAULT.map((n) => nuovaTariffa(n, 0));
-  const linee = LINEE_DEFAULT.map((def) => {
-    const l = nuovaLinea(def.nome);
-    l.voci = def.voci.map(([cat, nome]) => nuovaVoce(cat, nome, tariffe));
-    return l;
-  });
   return {
     versione: VERSIONE_SCHEMA,
     meta: {
@@ -731,7 +863,7 @@ function nuovaSimulazione() {
     },
     parametri: { sgPct: 0, ctgPct: 0, targetPct: 0, validitaTariffe: '' },
     tariffe,
-    linee,
+    linee: NOMI_LINEE.map((n) => lineaStandard(n, tariffe)),
     delta: { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: {}, voce: {} },
   };
 }
@@ -752,14 +884,20 @@ function normalizza(raw) {
     id: l.id || id('l'),
     nome: l.nome || 'Linea',
     ricavo: { preventivo: 0, kom: 0, ...(l.ricavo || {}) },
-    voci: (l.voci || []).map((v) => ({
-      id: v.id || id('v'),
-      cat: v.cat || 'materiale',
-      nome: v.nome || 'Voce',
-      tariffaId: v.tariffaId ?? null,
-      preventivo: { q: 0, sconto: 0, ...(v.preventivo || {}) },
-      kom: { q: 0, sconto: 0, ...(v.kom || {}) },
-    })),
+    voci: (l.voci || []).map((v) => {
+      const voce = {
+        id: v.id || id('v'),
+        cat: v.cat || 'materiale',
+        nome: v.nome || 'Voce',
+        tariffaId: v.tariffaId ?? null,
+        preventivo: { q: 0, sconto: 0, ...(v.preventivo || {}) },
+        kom: { q: 0, sconto: 0, ...(v.kom || {}) },
+      };
+      if (voce.cat === 'manodopera') {
+        voce.modo = v.modo === 'ore' || v.modo === 'importo' ? v.modo : (voce.tariffaId ? 'ore' : 'importo');
+      }
+      return voce;
+    }),
   }));
   return sim;
 }
@@ -774,10 +912,56 @@ function nomeFile(sim) {
   return `${codice}_${stamp}.json`;
 }
 
+// --- commessa di esempio -------------------------------------------------------------
+
+const ESEMPIO = {
+  'Quadri elettrici': {
+    ricavo: [240000, 232000],
+    voci: [
+      ['materiale', 'Componenti elettrici', 180000, 40, 180000, 37],
+      ['materiale', 'Carpenteria e quadro', 35000, 30, 35000, 30],
+      ['materiale', 'Cavi e minuteria', 14000, 25, 14000, 25],
+      ['manodopera', 'Produzione e cablaggio', 520, 0, 560, 0],
+      ['manodopera', 'Ingegneria elettrica', 200, 0, 210, 0],
+      ['manodopera', 'Ingegneria software', 140, 0, 160, 0],
+      ['altri', 'Trasporti e logistica', 3200, 0, 3500, 0],
+    ],
+  },
+  'Installazione cantiere': {
+    ricavo: [140000, 136000],
+    voci: [
+      ['materiale', 'Materiale di installazione', 28000, 20, 29000, 20],
+      ['manodopera', 'Montaggio in cantiere', 900, 0, 980, 0],
+      ['altri', 'Trasferte e viaggi', 12000, 0, 14000, 0],
+      ['altri', 'Vitto e alloggio', 9500, 0, 10500, 0],
+      ['altri', 'Noleggi', 6500, 0, 7000, 0],
+      ['altri', 'Subappalti e terzisti', 18000, 0, 21000, 0],
+    ],
+  },
+  Commissioning: {
+    ricavo: [86000, 84000],
+    voci: [
+      ['manodopera', 'Messa in servizio', 620, 0, 680, 0],
+      ['manodopera', 'Ingegneria software', 220, 0, 240, 0],
+      ['altri', 'Trasferte e viaggi', 13500, 0, 14500, 0],
+      ['altri', 'Vitto e alloggio', 10500, 0, 11000, 0],
+    ],
+  },
+};
+
+const TARIFFE_ESEMPIO = {
+  'Produzione e cablaggio': 38,
+  'Ingegneria elettrica': 52,
+  'Ingegneria software': 58,
+  'Montaggio in cantiere': 41,
+  'Messa in servizio': 46,
+  'Project management': 62,
+};
+
 /**
  * Commessa di esempio, dichiaratamente fittizia. Serve perché il tool si apra in uno stato
- * operativo invece che su una maschera vuota: chi lo apre la prima volta vede subito cosa fa.
- * I valori sono plausibili per una commessa di automazione industriale ma non sono dati reali.
+ * operativo invece che su una maschera vuota. I valori sono plausibili per una commessa di
+ * automazione industriale ma non sono dati reali.
  */
 function simulazioneEsempio() {
   const s = nuovaSimulazione();
@@ -790,65 +974,20 @@ function simulazioneEsempio() {
     note: '',
   };
   s.parametri = { sgPct: 9, ctgPct: 2, targetPct: 12, validitaTariffe: '' };
+  s.tariffe.forEach((t) => { t.eurOra = TARIFFE_ESEMPIO[t.nome] ?? 0; });
 
-  const tariffe = {
-    'Produzione e cablaggio': 38,
-    'Ingegneria elettrica': 52,
-    'Ingegneria software': 58,
-    'Montaggio in cantiere': 41,
-    'Messa in servizio': 46,
-    'Project management': 62,
-  };
-  s.tariffe.forEach((t) => { t.eurOra = tariffe[t.nome] ?? 0; });
-
-  // [nome voce, preventivo q, preventivo sconto, kom q, kom sconto]
-  const dati = {
-    'Quadri elettrici': {
-      ricavo: [240000, 232000],
-      voci: [
-        ['Componenti elettrici', 180000, 40, 180000, 37],
-        ['Carpenteria e quadro', 35000, 30, 35000, 30],
-        ['Cavi e minuteria', 14000, 25, 14000, 25],
-        ['Produzione e cablaggio', 520, 0, 560, 0],
-        ['Ingegneria elettrica', 200, 0, 210, 0],
-        ['Ingegneria software', 140, 0, 160, 0],
-        ['Trasporti e logistica', 3200, 0, 3500, 0],
-      ],
-    },
-    'Installazione cantiere': {
-      ricavo: [140000, 136000],
-      voci: [
-        ['Materiale di installazione', 28000, 20, 29000, 20],
-        ['Montaggio in cantiere', 900, 0, 980, 0],
-        ['Trasferte e viaggi', 12000, 0, 14000, 0],
-        ['Vitto e alloggio', 9500, 0, 10500, 0],
-        ['Noleggi', 6500, 0, 7000, 0],
-        ['Subappalti e terzisti', 18000, 0, 21000, 0],
-      ],
-    },
-    Commissioning: {
-      ricavo: [86000, 84000],
-      voci: [
-        ['Messa in servizio', 620, 0, 680, 0],
-        ['Ingegneria software', 220, 0, 240, 0],
-        ['Trasferte e viaggi', 13500, 0, 14500, 0],
-        ['Vitto e alloggio', 10500, 0, 11000, 0],
-      ],
-    },
-  };
-
-  for (const linea of s.linee) {
-    const d = dati[linea.nome];
-    if (!d) continue;
-    linea.ricavo = { preventivo: d.ricavo[0], kom: d.ricavo[1] };
-    for (const [nome, pq, ps, kq, ks] of d.voci) {
-      const v = linea.voci.find((x) => x.nome === nome);
-      if (!v) continue;
+  s.linee = NOMI_LINEE.map((nome) => {
+    const def = ESEMPIO[nome];
+    const l = nuovaLinea(nome);
+    l.ricavo = { preventivo: def.ricavo[0], kom: def.ricavo[1] };
+    l.voci = def.voci.map(([cat, n, pq, ps, kq, ks]) => {
+      const v = nuovaVoce(cat, n, s.tariffe);
       v.preventivo = { q: pq, sconto: ps };
       v.kom = { q: kq, sconto: ks };
-    }
-  }
-  s.delta = { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: {}, voce: {} };
+      return v;
+    });
+    return l;
+  });
   return s;
 }
 
@@ -1074,7 +1213,31 @@ function apriFile() {
 
 
 let sim = nuovaSimulazione();
-let vista = 'dettagliata';
+// Tre livelli di dettaglio. Si parte dal più semplice: nove numeri e un margine.
+// Il dettaglio si aggiunge quando serve, con pulsanti espliciti, non tutto subito.
+const LIVELLI = [
+  ['base', 'Base', 'Ricavo, materiale e manodopera per linea. Nove numeri in tutto.'],
+  ['intermedio', 'Intermedio', 'Aggiunge la colonna Preventivo, gli altri costi diretti e le spese generali.'],
+  ['completo', 'Completo', 'Righe per marca fornitore e tipo di manodopera, con tariffe orarie.'],
+];
+let livello = 'base';
+
+const colonneInput = () => (livello === 'base' ? ['kom'] : ['preventivo', 'kom']);
+
+/**
+ * Categorie mostrate per una linea. Al livello Base gli altri costi diretti restano fuori,
+ * ma solo finché sono a zero: nascondere un costo che sta abbassando il margine a schermo
+ * significa far leggere un numero senza mostrarne la causa.
+ */
+const categorieVisibili = (linea) => {
+  if (livello !== 'base') return CATEGORIE;
+  const viste = ['materiale', 'manodopera'];
+  const valorizzata = ((linea && linea.voci) || []).some((v) => v.cat === 'altri'
+    && (Number(v.preventivo && v.preventivo.q) || Number(v.kom && v.kom.q)));
+  if (valorizzata) viste.push('altri');
+  return viste;
+};
+const etichettaLivello = (k) => (LIVELLI.find((x) => x[0] === k) || [])[1] || k;
 let scheda = 'dati';
 let riferimentoIncidenza = 'cd';
 let elencoArchivio = [];
@@ -1241,175 +1404,227 @@ function pannelloCommessa() {
         campoTesto('Compilata da', 'meta.autore', sim.meta.autore))));
 }
 
-function pannelloParametri() {
-  const corpo = h('div', { class: 'corpo' },
-    h('div', { class: 'campi' },
-      campoNumero('Spese generali % sui costi diretti', 'parametri.sgPct', sim.parametri.sgPct),
-      campoNumero('Contingency % sui costi diretti', 'parametri.ctgPct', sim.parametri.ctgPct),
-      campoNumero('Margine industriale obiettivo %', 'parametri.targetPct', sim.parametri.targetPct),
-      campoTesto('Tariffe valide dal', 'parametri.validitaTariffe', sim.parametri.validitaTariffe, { type: 'date' })),
-    h('div', { class: 'tabellone', style: 'margin-top:12px' },
-      h('table', {},
+
+function pulsanteEspandi(aLivello, testo) {
+  return h('button', {
+    class: 'espandi', testo: testo,
+    onclick: () => { livello = aLivello; disegna(); avvisa('Livello ' + etichettaLivello(aLivello) + '.'); },
+  });
+}
+
+function tabellaTariffe() {
+  return h('div', {},
+    h('div', { class: 'tabellone' },
+      h('table', { class: 'tab-dati' },
         h('thead', {}, h('tr', {},
           h('th', { testo: 'Tipo di manodopera' }),
-          h('th', { class: 'n', testo: 'Costo orario €/h' }),
-          h('th', {}))),
-        h('tbody', {}, ...sim.tariffe.map((t, i) => h('tr', {},
-          h('td', {}, h('input', {
-            type: 'text', value: t.nome,
-            oninput: (e) => { t.nome = e.target.value; },
+          h('th', { class: 'n', testo: 'Costo orario \u20ac/h' }),
+          h('th', { class: 'azione-riga' }))),
+        h('tbody', {}, ...sim.tariffe.map((tr, i) => h('tr', {},
+          h('td', { 'data-et': 'Tipo' }, h('input', {
+            type: 'text', value: tr.nome, 'aria-label': 'Nome del tipo di manodopera',
+            oninput: (e) => { tr.nome = e.target.value; },
           })),
-          h('td', { class: 'n', style: 'width:130px' }, inputNumero(`tariffe.${i}.eurOra`, t.eurOra, { placeholder: 'da impostare' })),
-          h('td', { style: 'width:34px' }, h('button', {
-            class: 'muto', title: 'Rimuovi tariffa', testo: '×',
-            onclick: () => conAnnulla(`Tariffa "${t.nome}" rimossa.`, () => sim.tariffe.splice(i, 1)),
-          })))))),
-      h('button', {
-        style: 'margin-top:8px', testo: '+ tipo di manodopera',
-        onclick: () => { sim.tariffe.push(nuovaTariffa('Nuovo tipo', 0)); disegna(); },
-      })),
-    h('p', { class: 'nota', testo: 'Le tariffe sono il costo orario aziendale pieno, non il prezzo di vendita. Finché restano a zero il margine calcolato è privo di significato.' }));
-
-  return h('section', { class: 'pannello' }, h('h2', { testo: 'Parametri e tariffe orarie' }), corpo);
+          h('td', { class: 'n', 'data-et': '\u20ac/h', style: 'width:130px' },
+            inputNumero(`tariffe.${i}.eurOra`, tr.eurOra, { placeholder: 'da impostare' })),
+          h('td', { class: 'azione-riga' }, h('button', {
+            class: 'muto', title: 'Rimuovi tariffa', 'aria-label': 'Rimuovi tariffa', testo: '\u00d7',
+            onclick: () => conAnnulla(`Tariffa "${tr.nome}" rimossa.`, () => sim.tariffe.splice(i, 1)),
+          }))))))),
+    h('button', {
+      style: 'margin-top:8px', testo: '+ tipo di manodopera',
+      onclick: () => { sim.tariffe.push(nuovaTariffa('Nuovo tipo', 0)); disegna(); },
+    }),
+    h('p', { class: 'nota', testo: 'Costo orario aziendale pieno, non prezzo di vendita. Finché resta a zero, il margine delle righe in ore non ha significato.' }));
 }
+
+function pannelloParametri() {
+  const campi = [campoNumero('Margine industriale obiettivo %', 'parametri.targetPct', sim.parametri.targetPct)];
+  if (livello !== 'base') {
+    campi.unshift(
+      campoNumero('Spese generali % sui costi diretti', 'parametri.sgPct', sim.parametri.sgPct),
+      campoNumero('Contingency % sui costi diretti', 'parametri.ctgPct', sim.parametri.ctgPct));
+  }
+  if (livello === 'completo') {
+    campi.push(campoTesto('Tariffe valide dal', 'parametri.validitaTariffe', sim.parametri.validitaTariffe, { type: 'date' }));
+  }
+
+  return h('section', { class: 'pannello' },
+    h('h2', { testo: livello === 'completo' ? 'Parametri e tariffe orarie' : 'Parametri' }),
+    h('div', { class: 'corpo' },
+      h('div', { class: 'campi' }, ...campi),
+      livello === 'base'
+        ? h('p', { class: 'nota' },
+          'Spese generali e contingency restano a zero a questo livello, quindi il margine industriale coincide con il margine di contribuzione. ',
+          pulsanteEspandi('intermedio', 'Aggiungili'))
+        : null,
+      livello === 'completo' ? h('div', { style: 'margin-top:12px' }, tabellaTariffe()) : null,
+      livello === 'intermedio'
+        ? h('p', { class: 'nota' }, 'Le tariffe orarie servono solo se inserisci la manodopera in ore. ',
+          pulsanteEspandi('completo', 'Vai al dettaglio per voce'))
+        : null));
+}
+
 
 function cellaValore(voce, colonna, percorsoBase) {
   if (voce.cat === 'manodopera') {
-    return h('td', { class: 'n' },
+    const ore = modoManodopera(voce) === 'ore';
+    return h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[colonna] },
       h('div', { class: 'coppia' },
         inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { placeholder: '0' }),
-        h('span', { class: 'suff', testo: 'h' })));
+        h('span', { class: 'suff', testo: ore ? 'h' : '\u20ac' })));
   }
   if (voce.cat === 'materiale') {
-    return h('td', { class: 'n' },
+    return h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[colonna] },
       h('div', { class: 'coppia' },
         inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { placeholder: 'listino', title: 'Importo di listino' }),
-        inputNumero(`${percorsoBase}.${colonna}.sconto`, voce[colonna].sconto, { placeholder: '0', style: 'width:52px', title: 'Sconto %' }),
+        inputNumero(`${percorsoBase}.${colonna}.sconto`, voce[colonna].sconto, { placeholder: '0', style: 'width:52px', title: 'Sconto percentuale sul listino' }),
         h('span', { class: 'suff', testo: '%' })));
   }
-  return h('td', { class: 'n' }, inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { placeholder: '0' }));
+  return h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[colonna] },
+    inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { placeholder: '0' }));
 }
+
 
 function rigaVoce(linea, iL, voce, iV) {
   const base = `linee.${iL}.voci.${iV}`;
-  const nome = h('input', {
+  const celleNome = [h('input', {
     type: 'text', value: voce.nome, list: 'sugg-' + voce.cat,
+    'aria-label': 'Nome della voce',
     oninput: (e) => { voce.nome = e.target.value; },
-  });
-  const celleNome = [nome];
+  })];
+
   if (voce.cat === 'manodopera') {
-    celleNome.push(h('select', {
-      title: 'Tipo di manodopera a cui è agganciata la tariffa oraria',
-      style: 'margin-top:3px',
-      onchange: (e) => { voce.tariffaId = e.target.value || null; aggiornaDerivati(); },
-    },
-    h('option', { value: '', testo: '— nessuna tariffa —' }),
-    ...sim.tariffe.map((t) => h('option', {
-      value: t.id, selected: t.id === voce.tariffaId,
-      testo: `${t.nome} · ${t.eurOra ? numero(t.eurOra) + ' €/h' : 'da impostare'}`,
-    }))));
+    const ore = modoManodopera(voce) === 'ore';
+    celleNome.push(h('div', { class: 'coppia', style: 'margin-top:4px;gap:6px' },
+      h('button', {
+        class: 'muto commuta', testo: ore ? 'ore x tariffa' : 'importo in euro',
+        title: 'Passa da ore per tariffa a importo diretto',
+        onclick: () => {
+          voce.modo = ore ? 'importo' : 'ore';
+          if (voce.modo === 'ore' && !voce.tariffaId && sim.tariffe.length) voce.tariffaId = sim.tariffe[0].id;
+          disegna();
+        },
+      }),
+      ore ? h('select', {
+        'aria-label': 'Tariffa oraria applicata',
+        onchange: (e) => { voce.tariffaId = e.target.value || null; aggiornaDerivati(); },
+      },
+      h('option', { value: '', testo: '\u2014 nessuna tariffa \u2014' }),
+      ...sim.tariffe.map((tr) => h('option', {
+        value: tr.id, selected: tr.id === voce.tariffaId,
+        testo: `${tr.nome} \u00b7 ${tr.eurOra ? numero(tr.eurOra) + ' \u20ac/h' : 'da impostare'}`,
+      }))) : null));
   }
+
   return h('tr', {},
-    h('td', {}, ...celleNome),
-    cellaValore(voce, 'preventivo', base),
-    cellaValore(voce, 'kom', base),
-    h('td', { class: 'n derivato', 'data-out': 'voce:' + voce.id, testo: '—' }),
-    h('td', { style: 'width:34px' }, h('button', {
-      class: 'muto', title: 'Rimuovi voce', testo: '×',
+    h('td', { 'data-et': 'Voce' }, ...celleNome),
+    ...colonneInput().map((c) => cellaValore(voce, c, base)),
+    h('td', { class: 'n derivato', 'data-et': 'Simulato', 'data-out': 'voce:' + voce.id, testo: '\u2014' }),
+    h('td', { class: 'azione-riga' }, h('button', {
+      class: 'muto', title: 'Rimuovi voce', 'aria-label': 'Rimuovi voce', testo: '\u00d7',
       onclick: () => conAnnulla(`Voce "${voce.nome || 'senza nome'}" rimossa.`, () => linea.voci.splice(iV, 1)),
     })));
 }
 
+
 function tabellaLineaDettagliata(linea, iL) {
+  const cols = colonneInput();
   const corpo = h('tbody', {});
   corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { testo: 'Ricavo di linea' }),
-    h('td', { class: 'n' }, inputNumero(`linee.${iL}.ricavo.preventivo`, linea.ricavo.preventivo, { placeholder: '0' })),
-    h('td', { class: 'n' }, inputNumero(`linee.${iL}.ricavo.kom`, linea.ricavo.kom, { placeholder: '0' })),
-    h('td', { class: 'n derivato', 'data-out': 'ricavo:' + linea.id, testo: '—' }),
-    h('td', {})));
+    h('td', { 'data-et': 'Voce', testo: 'Ricavo di linea' }),
+    ...cols.map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c] },
+      inputNumero(`linee.${iL}.ricavo.${c}`, linea.ricavo[c], { placeholder: '0' }))),
+    h('td', { class: 'n derivato', 'data-et': 'Simulato', 'data-out': 'ricavo:' + linea.id, testo: '\u2014' }),
+    h('td', { class: 'azione-riga' })));
 
-  for (const cat of CATEGORIE) {
+  for (const cat of categorieVisibili(linea)) {
     const voci = linea.voci.filter((v) => v.cat === cat);
-    corpo.appendChild(h('tr', { class: 'cat' }, h('td', { colspan: 5 }, ETICHETTA_CATEGORIA[cat])));
+    corpo.appendChild(h('tr', { class: 'cat' }, h('td', { colspan: cols.length + 3 }, ETICHETTA_CATEGORIA[cat])));
     for (const voce of voci) corpo.appendChild(rigaVoce(linea, iL, voce, linea.voci.indexOf(voce)));
     corpo.appendChild(h('tr', {},
-      h('td', {}, h('button', {
+      h('td', { 'data-et': 'Voce' }, h('button', {
         class: 'muto', testo: '+ voce',
         onclick: () => { linea.voci.push(nuovaVoce(cat, '', sim.tariffe)); disegna(); },
       })),
-      h('td', { colspan: 2 }),
-      h('td', { class: 'n derivato', 'data-out': `cat:${linea.id}:${cat}`, testo: '—' }),
-      h('td', {})));
+      ...cols.map(() => h('td', { class: 'n' })),
+      h('td', { class: 'n derivato', 'data-et': 'Totale ' + ETICHETTA_CATEGORIA[cat], 'data-out': `cat:${linea.id}:${cat}`, testo: '\u2014' }),
+      h('td', { class: 'azione-riga' })));
   }
 
   corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { testo: 'Totale costi diretti' }),
-    h('td', { class: 'n', 'data-out': `cdcol:${linea.id}:preventivo`, testo: '—' }),
-    h('td', { class: 'n', 'data-out': `cdcol:${linea.id}:kom`, testo: '—' }),
-    h('td', { class: 'n', 'data-out': `cdcol:${linea.id}:simulato`, testo: '—' }),
-    h('td', {})));
+    h('td', { 'data-et': 'Voce', testo: 'Totale costi diretti' }),
+    ...cols.map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `cdcol:${linea.id}:${c}`, testo: '\u2014' })),
+    h('td', { class: 'n', 'data-et': 'Simulato', 'data-out': `cdcol:${linea.id}:simulato`, testo: '\u2014' }),
+    h('td', { class: 'azione-riga' })));
   corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { testo: 'Margine di contribuzione' }),
-    ...COLONNE.map((c) => h('td', { class: 'n', 'data-out': `mdclinea:${linea.id}:${c}`, testo: '—' })),
-    h('td', {})));
+    h('td', { 'data-et': 'Voce', testo: 'Margine di contribuzione' }),
+    ...[...cols, 'simulato'].map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `mdclinea:${linea.id}:${c}`, testo: '\u2014' })),
+    h('td', { class: 'azione-riga' })));
 
-  return h('div', { class: 'tabellone' }, h('table', {},
+  return h('div', { class: 'tabellone' }, h('table', { class: 'tab-dati' },
     h('thead', {}, h('tr', {},
       h('th', { testo: 'Voce' }),
-      h('th', { class: 'n', testo: 'Preventivo' }),
-      h('th', { class: 'n', testo: 'KOM' }),
+      ...cols.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })),
       h('th', { class: 'n', testo: 'Simulato' }),
-      h('th', {}))),
+      h('th', { class: 'azione-riga' }))),
     corpo));
 }
 
+
 function tabellaLineaSemplice(linea, iL) {
+  const cols = colonneInput();
   const corpo = h('tbody', {});
   corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { testo: 'Ricavo di linea' }),
-    h('td', { class: 'n' }, inputNumero(`linee.${iL}.ricavo.preventivo`, linea.ricavo.preventivo, { placeholder: '0' })),
-    h('td', { class: 'n' }, inputNumero(`linee.${iL}.ricavo.kom`, linea.ricavo.kom, { placeholder: '0' })),
-    h('td', { class: 'n derivato', 'data-out': 'ricavo:' + linea.id, testo: '—' })));
+    h('td', { 'data-et': 'Voce', testo: 'Ricavo di linea' }),
+    ...cols.map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c] },
+      inputNumero(`linee.${iL}.ricavo.${c}`, linea.ricavo[c], { placeholder: '0' }))),
+    h('td', { class: 'n derivato', 'data-et': 'Simulato', 'data-out': 'ricavo:' + linea.id, testo: '\u2014' })));
 
-  for (const cat of CATEGORIE) {
+  for (const cat of categorieVisibili(linea)) {
     const voci = linea.voci.filter((v) => v.cat === cat);
-    const unica = voci.length === 1 && voci[0].cat !== 'manodopera' ? voci[0] : null;
+    const unica = voci.length === 1 ? voci[0] : null;
     const iV = unica ? linea.voci.indexOf(unica) : -1;
+    const suffisso = unica && unica.cat === 'manodopera' && modoManodopera(unica) === 'ore' ? ' (ore)' : '';
+    const celle = cols.map((c) => (unica
+      ? h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c] },
+        inputNumero(`linee.${iL}.voci.${iV}.${c}.q`, unica[c].q, { placeholder: '0' }))
+      : h('td', { class: 'n derivato', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `catcol:${linea.id}:${cat}:${c}`, testo: '\u2014' })));
+
     corpo.appendChild(h('tr', {},
-      h('td', {},
-        h('strong', { testo: ETICHETTA_CATEGORIA[cat] }),
-        voci.length > 1 || (voci.length === 1 && !unica)
-          ? h('div', { class: 'nota', style: 'margin:0', testo: `somma di ${voci.length} ${voci.length === 1 ? 'voce' : 'voci'}, modificabile nella vista dettagliata` })
+      h('td', { 'data-et': 'Voce' },
+        h('strong', { testo: ETICHETTA_CATEGORIA[cat] + suffisso }),
+        voci.length > 1
+          ? h('div', { class: 'nota', style: 'margin:0' },
+            `somma di ${voci.length} voci. `,
+            h('button', {
+              class: 'muto commuta',
+              testo: 'modifica nel dettaglio',
+              onclick: () => { livello = 'completo'; disegna(); avvisa('Livello Completo: ora le singole voci sono modificabili.'); },
+            }))
+          : null,
+        voci.length === 0
+          ? h('button', {
+            class: 'muto', testo: '+ aggiungi',
+            onclick: () => { linea.voci.push(nuovaVoce(cat, ETICHETTA_CATEGORIA[cat], sim.tariffe)); disegna(); },
+          })
           : null),
-      unica
-        ? h('td', { class: 'n' }, inputNumero(`linee.${iL}.voci.${iV}.preventivo.q`, unica.preventivo.q, { placeholder: '0' }))
-        : h('td', { class: 'n derivato', 'data-out': `catcol:${linea.id}:${cat}:preventivo`, testo: '—' }),
-      unica
-        ? h('td', { class: 'n' }, inputNumero(`linee.${iL}.voci.${iV}.kom.q`, unica.kom.q, { placeholder: '0' }))
-        : h('td', { class: 'n derivato', 'data-out': `catcol:${linea.id}:${cat}:kom`, testo: '—' }),
-      h('td', { class: 'n derivato', 'data-out': `cat:${linea.id}:${cat}`, testo: '—' })));
-    if (voci.length === 0) {
-      corpo.lastChild.firstChild.appendChild(h('div', {},
-        h('button', {
-          class: 'muto', testo: '+ voce',
-          onclick: () => { linea.voci.push(nuovaVoce(cat, ETICHETTA_CATEGORIA[cat], sim.tariffe)); disegna(); },
-        })));
-    }
+      ...celle,
+      h('td', { class: 'n derivato', 'data-et': 'Simulato', 'data-out': `cat:${linea.id}:${cat}`, testo: '\u2014' })));
   }
 
   corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { testo: 'Margine di contribuzione' }),
-    ...COLONNE.map((c) => h('td', { class: 'n', 'data-out': `mdclinea:${linea.id}:${c}`, testo: '—' }))));
+    h('td', { 'data-et': 'Voce', testo: 'Margine di contribuzione' }),
+    ...[...cols, 'simulato'].map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `mdclinea:${linea.id}:${c}`, testo: '\u2014' }))));
 
-  return h('div', { class: 'tabellone' }, h('table', {},
+  return h('div', { class: 'tabellone' }, h('table', { class: 'tab-dati' },
     h('thead', {}, h('tr', {},
       h('th', { testo: 'Categoria' }),
-      h('th', { class: 'n', testo: 'Preventivo' }),
-      h('th', { class: 'n', testo: 'KOM' }),
+      ...cols.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })),
       h('th', { class: 'n', testo: 'Simulato' }))),
     corpo));
 }
+
 
 function pannelloLinea(linea, iL) {
   return h('section', { class: 'pannello' },
@@ -1419,10 +1634,10 @@ function pannelloLinea(linea, iL) {
         oninput: (e) => { linea.nome = e.target.value; aggiornaDerivati(); },
       }),
       h('button', {
-        class: 'muto', title: 'Rimuovi la linea di servizio', testo: '×',
+        class: 'muto', title: 'Rimuovi la linea di servizio', 'aria-label': 'Rimuovi la linea di servizio', testo: '\u00d7',
         onclick: () => conAnnulla(`Linea "${linea.nome}" rimossa con le sue ${linea.voci.length} voci.`, () => sim.linee.splice(iL, 1)),
       })),
-    vista === 'dettagliata' ? tabellaLineaDettagliata(linea, iL) : tabellaLineaSemplice(linea, iL));
+    livello === 'completo' ? tabellaLineaDettagliata(linea, iL) : tabellaLineaSemplice(linea, iL));
 }
 
 function bannerEsempio() {
@@ -1435,23 +1650,45 @@ function bannerEsempio() {
     }));
 }
 
+
+function pannelloLivello() {
+  const corrente = LIVELLI.find((x) => x[0] === livello);
+  return h('section', { class: 'pannello pannello-livello' },
+    h('div', { class: 'corpo' },
+      h('div', { class: 'scelta-livello' },
+        h('span', { class: 'et-livello', testo: 'Livello di dettaglio' }),
+        h('div', { class: 'gruppo-bottoni' },
+          ...LIVELLI.map(([k, et]) => h('button', {
+            class: livello === k ? 'primario' : '', testo: et,
+            'aria-pressed': livello === k ? 'true' : 'false',
+            onclick: () => { livello = k; disegna(); },
+          })))),
+      h('p', { class: 'nota', style: 'margin-top:6px', testo: corrente ? corrente[2] : '' })));
+}
+
 function schedaDati() {
+  const espansioni = [];
+  if (livello === 'base') {
+    espansioni.push(pulsanteEspandi('intermedio', '+ Confronta con il preventivo'));
+    espansioni.push(pulsanteEspandi('intermedio', '+ Altri costi diretti: trasferte, noleggi, subappalti'));
+  }
+  if (livello === 'intermedio') {
+    espansioni.push(pulsanteEspandi('completo', '+ Dettaglio per marca fornitore e tipo di manodopera'));
+  }
+
   return h('div', {},
     bannerEsempio(),
+    pannelloLivello(),
     pannelloCommessa(),
     pannelloParametri(),
-    h('div', { class: 'pannello', style: 'display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 14px' },
-      h('strong', { style: 'font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)', testo: 'Vista' }),
-      h('button', {
-        class: vista === 'semplice' ? 'primario' : '', testo: 'Semplice',
-        onclick: () => { vista = 'semplice'; disegna(); },
-      }),
-      h('button', {
-        class: vista === 'dettagliata' ? 'primario' : '', testo: 'Dettagliata',
-        onclick: () => { vista = 'dettagliata'; disegna(); },
-      }),
-      h('span', { class: 'nota', style: 'margin:0', testo: vista === 'semplice' ? 'Nove caselle: tre linee per tre categorie.' : 'Righe per marca fornitore e tipo di manodopera.' })),
     ...sim.linee.map((l, i) => pannelloLinea(l, i)),
+    espansioni.length
+      ? h('section', { class: 'pannello' },
+        h('h2', { testo: 'Serve più dettaglio?' }),
+        h('div', { class: 'corpo' },
+          h('div', { class: 'azioni' }, ...espansioni),
+          h('p', { class: 'nota', testo: 'Nulla di quello che hai inserito viene perso: il livello cambia solo cosa è visibile.' })))
+      : null,
     pannelloAggiungiLinea());
 }
 
@@ -1523,17 +1760,17 @@ function riepilogoSimulazione() {
     h('h2', { testo: 'Effetto della simulazione' }),
     h('div', { class: 'corpo' },
       h('p', { class: 'nota', style: 'margin-top:0', id: 'base-simulazione', testo: '' }),
-      h('div', { class: 'tabellone' }, h('table', {},
+      h('div', { class: 'tabellone' }, h('table', { class: 'tab-confronto' },
         h('thead', {}, h('tr', {},
           h('th', { testo: 'Grandezza' }),
           h('th', { class: 'n', 'data-out': 'cmp:intestazione', testo: 'Base' }),
           h('th', { class: 'n', testo: 'Simulato' }),
           h('th', { class: 'n', testo: 'Variazione' }))),
         h('tbody', {}, ...righe.map(([k, f, et]) => h('tr', k === 'mdc' || k === 'miPct' ? { class: 'somma' } : {},
-          h('td', { testo: et }),
-          h('td', { class: 'n', 'data-out': `cmp:${k}:base:${f}`, testo: '—' }),
-          h('td', { class: 'n', 'data-out': `cmp:${k}:sim:${f}`, testo: '—' }),
-          h('td', { class: 'n', 'data-out': `cmp:${k}:delta:${f}`, testo: '—' })))))))); 
+          h('td', { 'data-et': 'Grandezza', testo: et }),
+          h('td', { class: 'n', 'data-et': 'Base', 'data-out': `cmp:${k}:base:${f}`, testo: '\u2014' }),
+          h('td', { class: 'n', 'data-et': 'Simulato', 'data-out': `cmp:${k}:sim:${f}`, testo: '\u2014' }),
+          h('td', { class: 'n', 'data-et': 'Variazione', 'data-out': `cmp:${k}:delta:${f}`, testo: '\u2014' })))))))); 
 }
 
 function schedaSimulazione() {
@@ -1570,44 +1807,41 @@ function schedaSimulazione() {
 
 // --- scheda confronto --------------------------------------------------------------
 
+
 function rigaConfronto(etichetta, chiave, formato = 'euro', forte = false) {
   return h('tr', forte ? { class: 'somma' } : {},
-    h('td', { testo: etichetta }),
-    ...COLONNE.map((c) => h('td', { class: 'n', 'data-out': `tot:${c}:${chiave}:${formato}`, testo: '—' })));
+    h('td', { 'data-et': 'Voce', testo: etichetta }),
+    ...COLONNE.map((c) => h('td', {
+      class: 'n', 'data-et': ETICHETTA_COLONNA[c],
+      'data-out': `tot:${c}:${chiave}:${formato}`, testo: '\u2014',
+    })));
 }
 
+
 function tabellaGap(titolo, chiave, sottotitolo) {
+  const riga = (et, k) => h('tr', k === 'effettoRicavo' || k === 'effettoCosto' ? { class: 'somma' } : {},
+    h('td', { 'data-et': 'Grandezza', testo: et }),
+    h('td', { class: 'n', 'data-et': 'Margine di contribuzione', 'data-out': `gap:${chiave}:${k}:${k.includes('Pp') ? 'punti' : k.includes('Rel') ? 'rel' : 'euro'}`, testo: '\u2014' }),
+    (k === 'effettoRicavo' || k === 'effettoCosto')
+      ? h('td', { class: 'n', 'data-et': 'Margine industriale' })
+      : h('td', { class: 'n', 'data-et': 'Margine industriale', 'data-out': `gap:${chiave}:${k.replace('Mdc', 'Mi')}:${k.includes('Pp') ? 'punti' : k.includes('Rel') ? 'rel' : 'euro'}`, testo: '\u2014' }));
+
   return h('section', { class: 'pannello' },
     h('h2', { testo: titolo }),
     h('div', { class: 'corpo' },
       h('p', { class: 'nota', style: 'margin-top:0', testo: sottotitolo }),
-      h('div', { class: 'tabellone' }, h('table', {},
+      h('div', { class: 'tabellone' }, h('table', { class: 'tab-confronto' },
         h('thead', {}, h('tr', {},
           h('th', { testo: 'Grandezza' }),
           h('th', { class: 'n', testo: 'Margine di contribuzione' }),
           h('th', { class: 'n', testo: 'Margine industriale' }))),
         h('tbody', {},
-          h('tr', {},
-            h('td', { testo: 'Variazione assoluta' }),
-            h('td', { class: 'n', 'data-out': `gap:${chiave}:dMdc:euro` , testo: '—' }),
-            h('td', { class: 'n', 'data-out': `gap:${chiave}:dMi:euro`, testo: '—' })),
-          h('tr', {},
-            h('td', { testo: 'Variazione della marginalità' }),
-            h('td', { class: 'n', 'data-out': `gap:${chiave}:dMdcPp:punti`, testo: '—' }),
-            h('td', { class: 'n', 'data-out': `gap:${chiave}:dMiPp:punti`, testo: '—' })),
-          h('tr', {},
-            h('td', { testo: 'Variazione relativa del margine' }),
-            h('td', { class: 'n', 'data-out': `gap:${chiave}:dMdcRel:rel`, testo: '—' }),
-            h('td', { class: 'n', 'data-out': `gap:${chiave}:dMiRel:rel`, testo: '—' })),
-          h('tr', { class: 'somma' },
-            h('td', { testo: 'di cui effetto ricavo' }),
-            h('td', { class: 'n', 'data-out': `gap:${chiave}:effettoRicavo:euro`, testo: '—' }),
-            h('td', {})),
-          h('tr', { class: 'somma' },
-            h('td', { testo: 'di cui effetto costo' }),
-            h('td', { class: 'n', 'data-out': `gap:${chiave}:effettoCosto:euro`, testo: '—' }),
-            h('td', {}))))),
-      h('div', { class: 'tabellone', style: 'margin-top:10px' }, h('table', {},
+          riga('Variazione assoluta', 'dMdc'),
+          riga('Variazione della marginalità', 'dMdcPp'),
+          riga('Variazione relativa del margine', 'dMdcRel'),
+          riga('di cui effetto ricavo', 'effettoRicavo'),
+          riga('di cui effetto costo', 'effettoCosto')))),
+      h('div', { class: 'tabellone', style: 'margin-top:10px' }, h('table', { class: 'tab-confronto' },
         h('thead', {}, h('tr', {},
           h('th', { testo: 'Per linea di servizio' }),
           h('th', { class: 'n', testo: 'Effetto ricavo' }),
@@ -1631,12 +1865,12 @@ function pannelloIncidenze() {
           onclick: () => { riferimentoIncidenza = k; disegna(); },
         }))),
       h('p', { class: 'nota', style: 'margin-top:0', testo: spiegazione }),
-      h('div', { class: 'tabellone' }, h('table', {},
+      h('div', { class: 'tabellone' }, h('table', { class: 'tab-confronto tab-incidenze' },
         h('thead', {}, h('tr', {},
           h('th', { testo: 'Voce' }),
           ...COLONNE.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })),
-          h('th', { class: 'n', testo: 'Prev → KOM' }),
-          h('th', { class: 'n', testo: 'KOM → Sim' }))),
+          h('th', { class: 'n', testo: 'Prev \u2192 KOM' }),
+          h('th', { class: 'n', testo: 'KOM \u2192 Sim' }))),
         h('tbody', { 'data-lista': 'incidenze' })))));
 }
 
@@ -1644,7 +1878,7 @@ function schedaConfronto() {
   return h('div', {},
     h('section', { class: 'pannello' },
       h('h2', { testo: 'Le tre colonne a confronto' }),
-      h('div', { class: 'tabellone' }, h('table', {},
+      h('div', { class: 'tabellone' }, h('table', { class: 'tab-confronto' },
         h('thead', {}, h('tr', {},
           h('th', { testo: 'Voce' }),
           ...COLONNE.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })))),
@@ -1675,6 +1909,85 @@ function schedaConfronto() {
           h('div', { class: 'metrica forte' }, h('div', { class: 'et', testo: 'Riserva residua' }), h('div', { class: 'val', 'data-out': 'tot:simulato:riserva:euro', testo: '—' })),
           h('div', { class: 'metrica forte' }, h('div', { class: 'et', testo: 'Riserva in % sui costi' }), h('div', { class: 'val', 'data-out': 'tot:simulato:riservaPct:perc', testo: '—' }))),
         h('p', { class: 'nota', id: 'lettura-riserva', testo: '' }))));
+}
+
+
+function vociGuida(righe) {
+  return h('dl', { class: 'guida-elenco' },
+    ...righe.flatMap(([et, testo]) => [h('dt', { testo: et }), h('dd', { testo })]));
+}
+
+function schedaGuida() {
+  const suTouch = matchMedia('(hover: none)').matches;
+  const cartella = supportaCartella();
+
+  return h('div', { class: 'guida' },
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'A cosa serve' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'Simula come si muove il margine di una commessa al variare dei costi, divisi per linea di servizio. Non è un consuntivo e non tiene lo storico: ogni simulazione è una fotografia del momento in cui la fai. Quando serve, la salvi in archivio e non ci torni più sopra.'),
+        h('p', {}, 'Tre colonne sulla stessa struttura: ',
+          h('b', { testo: 'Preventivo' }), ' (l’offerta), ',
+          h('b', { testo: 'KOM' }), ' (il budget concordato al kick off meeting) e ',
+          h('b', { testo: 'Simulato' }), ' (lo scenario che stai provando). Il simulato si ottiene muovendo i cursori, non riscrivendo i numeri.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Inizia semplice, aggiungi dettaglio dopo' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'Lo strumento si apre al livello Base: per ogni linea di servizio inserisci ricavo, materiale e manodopera. Nove numeri e hai un margine. Quando ti serve di più, i pulsanti nella scheda Dati espandono la maschera senza perdere nulla di quanto inserito.'),
+        vociGuida([
+          ['Base', 'Ricavo, materiale e manodopera per linea, una colonna sola. Per una stima rapida, anche dal telefono.'],
+          ['Intermedio', 'Aggiunge la colonna Preventivo per il confronto con l’offerta, gli altri costi diretti (trasferte, noleggi, subappalti) e le spese generali.'],
+          ['Completo', 'Righe per marca fornitore e tipo di manodopera, con tariffe orarie. È il livello per il budget esecutivo.'],
+        ]),
+        h('p', { class: 'nota' }, 'Scendere di livello non cancella niente: nasconde soltanto. Una categoria con più voci compare come somma non modificabile finché non torni al livello Completo.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Come vedere da dove arriva un numero' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, suTouch
+          ? 'Tocca una cella calcolata (quelle con il bordino tratteggiato sotto) e compare il calcolo che l’ha prodotta: listino meno sconto, ore per tariffa, ricavo meno costi, e quali scostamenti sono stati applicati.'
+          : 'Clicca una cella calcolata, quelle con il bordino tratteggiato sotto, e compare il calcolo che l’ha prodotta. Fermando il puntatore sopra, lo stesso testo appare come suggerimento del browser.'),
+        h('p', { class: 'nota' }, 'Sul telefono non esiste il passaggio del dito sopra una cella: il browser non ha un evento di hover sul touch, quindi la spiegazione si apre al tocco. Si chiude toccando fuori, o con Esc da tastiera.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Leggere il confronto senza sbagliare' }),
+      h('div', { class: 'corpo' },
+        vociGuida([
+          ['Margine di contribuzione', 'Ricavo meno costi diretti della commessa. È la leva che il PM controlla.'],
+          ['Margine industriale', 'Dopo spese generali e contingency. È quello che si confronta con il budget aziendale.'],
+          ['Variazione assoluta', 'Quanti euro di margine si sono persi o guadagnati.'],
+          ['Punti percentuali (p.p.)', 'Differenza fra due percentuali. Da 18% a 14% sono meno 4 punti percentuali.'],
+          ['Variazione relativa', 'Quanta parte del margine si è bruciata. Da 18% a 14% è meno 25,3%: stesso fatto, numero diverso. Confonderla con i punti percentuali è l’errore più comune.'],
+          ['Effetto ricavo ed effetto costo', 'Da dove nasce lo scostamento: una concessione di prezzo o un costo che è cresciuto. Sommati danno la variazione totale.'],
+        ]),
+        h('p', {}, 'Nel pannello Incidenza puoi scegliere il riferimento, e le due letture non sono intercambiabili: sui costi diretti descrive la composizione del costo e ',
+          h('b', { testo: 'non si muove' }),
+          ' se aumenti tutte le voci nella stessa misura; sul ricavo descrive quanta parte della commessa se ne va in quella voce e si muove sempre.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Dal telefono' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'Tutte le schede funzionano a larghezza telefono. Nella scheda Confronto le tabelle si ricompongono in blocchi verticali: ogni riga diventa un piccolo riquadro con la sua etichetta accanto al numero, quindi non serve scorrere di lato per leggere una cifra.'),
+        vociGuida([
+          ['Su iPhone e iPad', 'Funziona tutto tranne il collegamento a una cartella di rete: Safari non espone il selettore di cartelle, e su iOS tutti i browser usano lo stesso motore, quindi il limite vale anche per Chrome ed Edge sul telefono. Dal telefono l’archivio resta nella memoria del browser, oppure usi Apri e salva file.'],
+          ['Consiglio d’uso', 'Il telefono è comodo per il livello Base e per rivedere il confronto. Il budget esecutivo al livello Completo si compila meglio da computer.'],
+          ['Archivio condiviso', 'La cartella di rete richiede Chrome o Edge su computer. È l’unico modo per avere un archivio che sopravvive alla pulizia del browser e che altri PM possono vedere.'],
+        ]),
+        cartella
+          ? h('p', { class: 'nota', testo: 'Su questo dispositivo il collegamento a una cartella è disponibile.' })
+          : h('p', { class: 'nota', testo: 'Su questo dispositivo il collegamento a una cartella non è disponibile: usa Scarica e Apri file, oppure la memoria del browser.' }))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Prima di usarlo sul serio' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'Se inserisci la manodopera in ore, le tariffe orarie devono essere il costo orario aziendale pieno, non il prezzo di vendita. Finché restano a zero, il margine delle righe in ore non ha significato. Le imposti nel livello Completo, nel pannello Parametri.'),
+        h('p', { class: 'nota' }, 'In alternativa, al livello Base la manodopera si inserisce direttamente in euro: nessuna tariffa da impostare, nessuno zero nascosto.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Cosa non fa' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'Niente consuntivazione ore, niente avanzamento lavori, niente storico da aggiornare, nessuna approvazione, nessun collegamento al gestionale. È voluto: serve a ragionare in fretta su uno scenario, non a sostituire il controllo di gestione.'))));
 }
 
 // --- scheda archivio ---------------------------------------------------------------
@@ -1855,12 +2168,72 @@ function disegnaTornado() {
 
 // --- aggiornamento dei valori derivati ---------------------------------------------
 
-function scrivi(sel, testo, classe) {
+
+// Spiegazione del calcolo dietro ogni cella derivata, indicizzata per chiave di uscita.
+const spiegazioni = new Map();
+
+function scrivi(sel, testo, classe, spiegazione) {
+  if (spiegazione !== undefined && spiegazione !== null) spiegazioni.set(sel, spiegazione);
   for (const n of $$(`[data-out="${sel}"]`)) {
     n.textContent = testo;
     n.classList.remove('v-buono', 'v-critico');
     if (classe) n.classList.add(classe);
+    const s = spiegazioni.get(sel);
+    if (s) {
+      n.classList.add('spiegabile');
+      n.setAttribute('title', s);
+      n.setAttribute('tabindex', '0');
+      n.setAttribute('role', 'button');
+    }
   }
+}
+
+/**
+ * Mostra come è stato ottenuto un numero. Sul telefono non esiste il passaggio del dito
+ * sopra una cella: il browser non ha un evento di hover sul touch, e il primo tocco su un
+ * elemento con stile hover lo attiva soltanto. Quindi la funzione è costruita sul tocco,
+ * e sul desktop resta disponibile anche come suggerimento del browser.
+ */
+function chiudiSpiegazione() {
+  const p = $('#spiegazione');
+  if (p) { p.hidden = true; p.textContent = ''; }
+  for (const n of $$('.spiegabile.aperta')) n.classList.remove('aperta');
+}
+
+function mostraSpiegazione(cella) {
+  const chiave = cella.getAttribute('data-out');
+  const testo = spiegazioni.get(chiave);
+  if (!testo) return;
+  const p = $('#spiegazione');
+  if (!p) return;
+  chiudiSpiegazione();
+  cella.classList.add('aperta');
+  const et = cella.getAttribute('data-et') || cella.closest('tr')?.firstElementChild?.textContent?.trim() || '';
+  p.textContent = '';
+  p.appendChild(h('div', { class: 'titolo-spiega' },
+    h('span', { testo: et ? et + ' \u00b7 ' + cella.textContent.trim() : cella.textContent.trim() }),
+    h('button', { class: 'muto', 'aria-label': 'Chiudi', testo: '\u00d7', onclick: chiudiSpiegazione })));
+  p.appendChild(h('div', { class: 'corpo-spiega', testo }));
+  p.hidden = false;
+}
+
+function collegaSpiegazioni() {
+  document.addEventListener('click', (e) => {
+    const t2 = e.target;
+    if (!t2 || !t2.closest) return;
+    if (t2.closest('#spiegazione')) return;
+    const cella = t2.closest('[data-out].spiegabile');
+    if (cella) { e.preventDefault(); mostraSpiegazione(cella); return; }
+    chiudiSpiegazione();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') chiudiSpiegazione();
+    if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.classList
+        && e.target.classList.contains('spiegabile')) {
+      e.preventDefault();
+      mostraSpiegazione(e.target);
+    }
+  });
 }
 
 function formatta(v, formato) {
@@ -1870,54 +2243,146 @@ function formatta(v, formato) {
   return euro(v);
 }
 
+
+const pctTesto = (v) => (Number(v) || 0).toFixed(Number.isInteger(Number(v)) ? 0 : 1).replace('.', ',') + '%';
+
+/** Testo che spiega come nasce il costo di una voce nella colonna indicata. */
+function spiegaVoce(voce, colonna, costo) {
+  const d = voce[colonna] || {};
+  if (voce.cat === 'manodopera') {
+    if (modoManodopera(voce) === 'importo') return `Importo inserito: ${euro(costo)}.`;
+    const tr = sim.tariffe.find((x) => x.id === voce.tariffaId);
+    if (!tr || !tr.eurOra) {
+      return `${numero(d.q)} h senza tariffa oraria impostata, quindi ${euro(0)}. Imposta la tariffa nel livello Completo.`;
+    }
+    return `${numero(d.q)} h \u00d7 ${numero(tr.eurOra)} \u20ac/h (${tr.nome}) = ${euro(costo)}.`;
+  }
+  if (voce.cat === 'materiale' && Number(d.sconto)) {
+    return `Listino ${euro(d.q)} meno sconto ${pctTesto(d.sconto)} = ${euro(costo)}.`;
+  }
+  return `Importo inserito: ${euro(costo)}.`;
+}
+
+function spiegaFattore(linea, voce) {
+  const dd = sim.delta || {};
+  const pezzi = [];
+  const aggiungi = (v, et) => { if (Number(v)) pezzi.push(`${et} ${Number(v) > 0 ? '+' : ''}${pctTesto(v)}`); };
+  aggiungi(dd.globale, 'tutti i costi');
+  aggiungi((dd.linea || {})[linea.id], linea.nome);
+  aggiungi((dd.catLinea || {})[linea.id + '|' + voce.cat], ETICHETTA_CATEGORIA[voce.cat]);
+  aggiungi((dd.voce || {})[voce.id], voce.nome || 'voce');
+  return pezzi;
+}
+
 function aggiornaDerivati() {
   const r = calcola(sim);
   const target = (sim.parametri.targetPct || 0) / 100;
+  const sg = sim.parametri.sgPct || 0;
+  const ctg = sim.parametri.ctgPct || 0;
 
   for (const c of COLONNE) {
     const col = r.colonne[c];
+    const et = ETICHETTA_COLONNA[c];
     for (const [k, v] of Object.entries(col)) {
       if (typeof v === 'number' || v === null) {
         scrivi(`tot:${c}:${k}:euro`, formatta(v, 'euro'));
         scrivi(`tot:${c}:${k}:perc`, formatta(v, 'perc'));
       }
     }
+    scrivi(`tot:${c}:mdc:euro`, formatta(col.mdc, 'euro'), null,
+      `${et}: ricavo ${euro(col.ricavo)} meno costi diretti ${euro(col.cd)} = ${euro(col.mdc)}.`);
+    scrivi(`tot:${c}:mdcPct:perc`, formatta(col.mdcPct, 'perc'), null,
+      `${euro(col.mdc)} diviso ricavo ${euro(col.ricavo)} = ${perc(col.mdcPct)}.`);
+    scrivi(`tot:${c}:speseGenerali:euro`, formatta(col.speseGenerali, 'euro'), null,
+      `Costi diretti ${euro(col.cd)} \u00d7 ${pctTesto(sg)} = ${euro(col.speseGenerali)}.`);
+    scrivi(`tot:${c}:contingency:euro`, formatta(col.contingency, 'euro'), null,
+      `Costi diretti ${euro(col.cd)} \u00d7 ${pctTesto(ctg)} = ${euro(col.contingency)}.`);
+    scrivi(`tot:${c}:mi:euro`, formatta(col.mi, 'euro'), null,
+      `${euro(col.ricavo)} meno costi ${euro(col.cd)} meno spese generali ${euro(col.speseGenerali)} meno contingency ${euro(col.contingency)} = ${euro(col.mi)}.`);
+    scrivi(`tot:${c}:miPct:perc`, formatta(col.miPct, 'perc'), null,
+      `${euro(col.mi)} diviso ricavo ${euro(col.ricavo)} = ${perc(col.miPct)}.`);
+    scrivi(`tot:${c}:cd:euro`, formatta(col.cd, 'euro'), null,
+      `Somma dei costi diretti delle ${col.linee.length} linee di servizio: ${euro(col.cd)}.`);
+
     for (const l of col.linee) {
-      scrivi(`cdcol:${l.id}:${c}`, euro(l.cd));
-      scrivi(`mdclinea:${l.id}:${c}`, `${euro(l.mdc)}  ·  ${perc(l.mdcPct)}`);
-      for (const cat of CATEGORIE) scrivi(`catcol:${l.id}:${cat}:${c}`, euro(l.perCategoria[cat]));
+      scrivi(`cdcol:${l.id}:${c}`, euro(l.cd), null,
+        CATEGORIE.map((cat) => `${ETICHETTA_CATEGORIA[cat]} ${euro(l.perCategoria[cat] || 0)}`).join(' + ') + ` = ${euro(l.cd)}.`);
+      scrivi(`mdclinea:${l.id}:${c}`, `${euro(l.mdc)}  \u00b7  ${perc(l.mdcPct)}`, null,
+        `${l.nome}, ${et}: ricavo ${euro(l.ricavo)} meno costi ${euro(l.cd)} = ${euro(l.mdc)}, pari al ${perc(l.mdcPct)} del ricavo di linea.`);
+      for (const cat of CATEGORIE) {
+        scrivi(`catcol:${l.id}:${cat}:${c}`, euro(l.perCategoria[cat]), null,
+          `Somma delle voci di ${ETICHETTA_CATEGORIA[cat]} in ${l.nome}, colonna ${et}: ${euro(l.perCategoria[cat])}.`);
+      }
     }
   }
 
   const s = r.colonne.simulato;
-  for (const l of s.linee) {
-    scrivi('ricavo:' + l.id, euro(l.ricavo));
-    for (const cat of CATEGORIE) scrivi(`cat:${l.id}:${cat}`, euro(l.perCategoria[cat]));
-    for (const [idVoce, costo] of Object.entries(l.voci)) scrivi('voce:' + idVoce, euro(costo));
+  const baseEt = ETICHETTA_COLONNA[r.baseSimulazione];
+  for (const linea of sim.linee) {
+    const l = s.linee.find((x) => x.id === linea.id);
+    if (!l) continue;
+    const dRic = [];
+    if (Number((sim.delta || {}).ricavo)) dRic.push(`tutti i ricavi ${pctTesto(sim.delta.ricavo)}`);
+    if (Number(((sim.delta || {}).ricavoLinea || {})[linea.id])) dRic.push(`${linea.nome} ${pctTesto(sim.delta.ricavoLinea[linea.id])}`);
+    scrivi('ricavo:' + linea.id, euro(l.ricavo), null,
+      `Ricavo ${baseEt} ${euro(linea.ricavo[r.baseSimulazione])}`
+      + (dRic.length ? `, con gli scostamenti ${dRic.join(' e ')}` : ', nessuno scostamento sui ricavi')
+      + ` = ${euro(l.ricavo)}.`);
+
+    for (const cat of CATEGORIE) {
+      const n = linea.voci.filter((v) => v.cat === cat).length;
+      scrivi(`cat:${linea.id}:${cat}`, euro(l.perCategoria[cat]), null,
+        `Somma di ${n} ${n === 1 ? 'voce' : 'voci'} di ${ETICHETTA_CATEGORIA[cat]} nella colonna Simulato: ${euro(l.perCategoria[cat])}.`);
+    }
+
+    for (const voce of linea.voci) {
+      const costo = l.voci[voce.id] || 0;
+      const baseCosto = r.colonne[r.baseSimulazione].linee.find((x) => x.id === linea.id)?.voci[voce.id] || 0;
+      const fattori = spiegaFattore(linea, voce);
+      const parti = [`Base ${baseEt}: ` + spiegaVoce(voce, r.baseSimulazione, baseCosto)];
+      parti.push(fattori.length
+        ? `Scostamenti applicati: ${fattori.join(', ')}. Risultato simulato ${euro(costo)}.`
+        : 'Nessuno scostamento applicato a questa voce.');
+      scrivi('voce:' + voce.id, euro(costo), null, parti.join(' '));
+    }
   }
+
   const kom = r.colonne.kom;
   for (const l of kom.linee) {
     for (const cat of CATEGORIE) {
       const base = l.perCategoria[cat];
       const simCat = s.linee.find((x) => x.id === l.id)?.perCategoria[cat] ?? 0;
-      scrivi(`catsim:${l.id}:${cat}`, base ? euroSegnato(simCat - base) : '—');
+      scrivi(`catsim:${l.id}:${cat}`, base ? euroSegnato(simCat - base) : '\u2014');
     }
   }
 
   for (const [chiave, g] of [['gapPreventivoKom', r.gapPreventivoKom], ['gapKomSimulato', r.gapKomSimulato]]) {
+    const da = ETICHETTA_COLONNA[g.da];
+    const a = ETICHETTA_COLONNA[g.a];
+    const spiega = {
+      dMdc: `Margine di contribuzione ${a} meno ${da}: ${euro(r.colonne[g.a].mdc)} meno ${euro(r.colonne[g.da].mdc)} = ${euroSegnato(g.dMdc)}.`,
+      dMi: `Margine industriale ${a} meno ${da}: ${euroSegnato(g.dMi)}.`,
+      dMdcPp: `Marginalità ${a} ${perc(r.colonne[g.a].mdcPct)} meno marginalità ${da} ${perc(r.colonne[g.da].mdcPct)} = ${punti(g.dMdcPp)}. È una differenza fra due percentuali, quindi si misura in punti percentuali.`,
+      dMiPp: `Margine industriale ${a} ${perc(r.colonne[g.a].miPct)} meno ${da} ${perc(r.colonne[g.da].miPct)} = ${punti(g.dMiPp)}.`,
+      dMdcRel: `Quanta parte del margine di ${da} si è persa: ${euroSegnato(g.dMdc)} diviso ${euro(r.colonne[g.da].mdc)} = ${percRel(g.dMdcRel)}. Non confonderla con i punti percentuali.`,
+      dMiRel: `Variazione relativa del margine industriale rispetto a ${da}: ${percRel(g.dMiRel)}.`,
+      effettoRicavo: `Ricavo ${a} ${euro(r.colonne[g.a].ricavo)} meno ricavo ${da} ${euro(r.colonne[g.da].ricavo)} = ${euroSegnato(g.effettoRicavo)}. È la parte di scostamento dovuta al prezzo, non ai costi.`,
+      effettoCosto: `Costi ${da} ${euro(r.colonne[g.da].cd)} meno costi ${a} ${euro(r.colonne[g.a].cd)} = ${euroSegnato(g.effettoCosto)}. Sommato all'effetto ricavo dà ${euroSegnato(g.dMdc)}.`,
+    };
     for (const [k, formato] of [['dMdc', 'euro'], ['dMi', 'euro'], ['dMdcPp', 'punti'], ['dMiPp', 'punti'], ['dMdcRel', 'rel'], ['dMiRel', 'rel'], ['effettoRicavo', 'euro'], ['effettoCosto', 'euro']]) {
       const v = g[k];
-      scrivi(`gap:${chiave}:${k}:${formato}`, formatta(v, formato), v === null ? null : (v >= 0 ? 'v-buono' : 'v-critico'));
+      scrivi(`gap:${chiave}:${k}:${formato}`, formatta(v, formato),
+        v === null ? null : (v >= 0 ? 'v-buono' : 'v-critico'), spiega[k]);
     }
     const tb = $(`[data-lista="perlinea:${chiave}"]`);
     if (tb) {
       tb.textContent = '';
       for (const l of g.perLinea) {
         tb.appendChild(h('tr', {},
-          h('td', { testo: l.nome }),
-          h('td', { class: 'n ' + (l.effettoRicavo >= 0 ? 'v-buono' : 'v-critico'), testo: euroSegnato(l.effettoRicavo) }),
-          ...CATEGORIE.map((c) => h('td', { class: 'n ' + (l.perCategoria[c] >= 0 ? 'v-buono' : 'v-critico'), testo: euroSegnato(l.perCategoria[c]) })),
-          h('td', { class: 'n', style: 'font-weight:600', testo: euroSegnato(l.dMdc) })));
+          h('td', { 'data-et': 'Linea', testo: l.nome }),
+          h('td', { class: 'n ' + (l.effettoRicavo >= 0 ? 'v-buono' : 'v-critico'), 'data-et': 'Effetto ricavo', testo: euroSegnato(l.effettoRicavo) }),
+          ...CATEGORIE.map((c) => h('td', { class: 'n ' + (l.perCategoria[c] >= 0 ? 'v-buono' : 'v-critico'), 'data-et': ETICHETTA_CATEGORIA[c], testo: euroSegnato(l.perCategoria[c]) })),
+          h('td', { class: 'n', 'data-et': 'Totale', style: 'font-weight:600', testo: euroSegnato(l.dMdc) })));
       }
     }
   }
@@ -1926,32 +2391,34 @@ function aggiornaDerivati() {
   if (corpoInc) {
     corpoInc.textContent = '';
     const { righe } = incidenze(sim, r, riferimentoIncidenza);
+    const denomEt = riferimentoIncidenza === 'ricavo' ? 'ricavo' : 'costi diretti';
     for (const riga of righe) {
       const classeRiga = riga.tipo === 'totale' ? 'riga-totale' : riga.tipo === 'margine' ? 'riga-margine' : '';
-      const cellaDelta = (v) => {
-        if (v === null || !Number.isFinite(v)) return h('td', { class: 'n', testo: 'n.d.' });
-        if (Math.abs(v) < 0.05) return h('td', { class: 'n fermo', testo: 'invariata' });
-        // Per un costo, pesare di più è un peggioramento; per il margine è il contrario.
+      const cellaDelta = (v, et) => {
+        if (v === null || !Number.isFinite(v)) return h('td', { class: 'n', 'data-et': et, testo: 'n.d.' });
+        if (Math.abs(v) < 0.05) return h('td', { class: 'n fermo', 'data-et': et, testo: 'invariata' });
         const bene = riga.tipo === 'margine' ? v > 0 : v < 0;
-        return h('td', { class: 'n ' + (bene ? 'v-buono' : 'v-critico'), testo: punti(v) });
+        return h('td', { class: 'n ' + (bene ? 'v-buono' : 'v-critico'), 'data-et': et, testo: punti(v) });
       };
       corpoInc.appendChild(h('tr', classeRiga ? { class: classeRiga } : {},
-        h('td', { class: 'liv' + riga.livello, testo: riga.nome }),
-        ...COLONNE.map((c) => h('td', { class: 'n', testo: perc(riga.valori[c]) })),
-        cellaDelta(riga.dPreventivoKom),
-        cellaDelta(riga.dKomSimulato)));
+        h('td', { class: 'liv' + riga.livello, 'data-et': 'Voce', testo: riga.nome }),
+        ...COLONNE.map((c) => h('td', {
+          class: 'n', 'data-et': ETICHETTA_COLONNA[c],
+          title: `Peso di "${riga.nome}" sui ${denomEt} della colonna ${ETICHETTA_COLONNA[c]}.`,
+          testo: perc(riga.valori[c]),
+        })),
+        cellaDelta(riga.dPreventivoKom, 'Prev \u2192 KOM'),
+        cellaDelta(riga.dKomSimulato, 'KOM \u2192 Sim')));
     }
   }
 
-  // barra risultati
   scrivi('barra:ricavo', euro(s.ricavo));
   scrivi('barra:costi', euro(s.cd));
-  scrivi('barra:mdc', euro(s.mdc));
+  scrivi('barra:mdc', euro(s.mdc), null, `Ricavo ${euro(s.ricavo)} meno costi diretti ${euro(s.cd)} = ${euro(s.mdc)}.`);
   for (const c of COLONNE) scrivi(`barra:mdcpct:${c}`, perc(r.colonne[c].mdcPct));
   scrivi('barra:mi', euro(s.mi));
 
   const colBase = r.colonne[r.baseSimulazione];
-  const gSim = gap(colBase, s);
   scrivi('cmp:intestazione', ETICHETTA_COLONNA[r.baseSimulazione]);
   for (const [k, formato] of [['ricavo', 'euro'], ['cd', 'euro'], ['mdc', 'euro'], ['mdcPct', 'perc'], ['mi', 'euro'], ['miPct', 'perc']]) {
     scrivi(`cmp:${k}:base:${formato}`, formatta(colBase[k], formato));
@@ -1971,13 +2438,19 @@ function aggiornaDerivati() {
       ? 'La simulazione parte dalla colonna KOM. Gli scostamenti non modificano il KOM: creano una terza colonna.'
       : 'La colonna KOM è ancora vuota, quindi la simulazione parte dal Preventivo. Compilando il KOM la base passa automaticamente a quello.';
   }
-  void gSim;
 
   const pil = $('#semaforo');
   if (pil) {
     pil.className = 'pillola ' + classeMargine(s.miPct, target);
-    pil.textContent = 'MI simulato ' + perc(s.miPct) + (target > 0 ? ' · obiettivo ' + perc(target) : '');
+    pil.textContent = 'MI simulato ' + perc(s.miPct) + (target > 0 ? ' \u00b7 obiettivo ' + perc(target) : '');
   }
+
+  scrivi('tot:simulato:cdMax:euro', euro(s.cdMax), null,
+    `Ricavo ${euro(s.ricavo)} \u00d7 (100% meno obiettivo ${perc(target)}) diviso (1 + spese generali ${pctTesto(sg)} + contingency ${pctTesto(ctg)}) = ${euro(s.cdMax)}.`);
+  scrivi('tot:simulato:riserva:euro', euro(s.riserva), null,
+    `Costo massimo ammissibile ${euro(s.cdMax)} meno costi simulati ${euro(s.cd)} = ${euro(s.riserva)}.`);
+  scrivi('tot:simulato:riservaPct:perc', perc(s.riservaPct), null,
+    `${euro(s.riserva)} diviso costi simulati ${euro(s.cd)} = ${perc(s.riservaPct)}.`);
 
   const lettura = $('#lettura-riserva');
   if (lettura) {
@@ -1999,6 +2472,7 @@ const SCHEDE = [
   ['simulazione', 'Simulazione'],
   ['confronto', 'Confronto'],
   ['archivio', 'Archivio'],
+  ['guida', 'Guida'],
 ];
 
 /** In un contenitore incorporato i download vengono bloccati senza alcun errore visibile.
@@ -2073,6 +2547,7 @@ function esportaCsv() {
 }
 
 function disegna() {
+  chiudiSpiegazione();
   const radice = $('#radice');
   radice.textContent = '';
 
@@ -2087,7 +2562,8 @@ function disegna() {
     contenuto = scheda === 'dati' ? schedaDati()
       : scheda === 'simulazione' ? schedaSimulazione()
         : scheda === 'confronto' ? schedaConfronto()
-          : schedaArchivio();
+          : scheda === 'guida' ? schedaGuida()
+            : schedaArchivio();
   } catch (e) {
     // Meglio una schermata che spiega il problema di una pagina bianca: i dati inseriti
     // restano in memoria e le altre schede continuano a funzionare.
@@ -2121,15 +2597,22 @@ function testa() {
       })));
 }
 
+
 function barra() {
+  const metrica = (et, chiave, classe = '') => h('div', { class: 'metrica ' + classe },
+    h('div', { class: 'et', testo: et }),
+    h('div', { class: 'val', 'data-out': chiave, testo: '\u2014' }));
+
+  // Su schermo stretto restano solo semaforo, margine e marginalità simulata: le altre
+  // metriche sono marcate secondarie e si nascondono, altrimenti la barra mangia lo schermo.
   return h('footer', { class: 'barra' },
-    h('span', { class: 'pillola p-neutro', id: 'semaforo', testo: '—' }),
-    h('div', { class: 'metrica' }, h('div', { class: 'et', testo: 'Ricavo simulato' }), h('div', { class: 'val', 'data-out': 'barra:ricavo', testo: '—' })),
-    h('div', { class: 'metrica' }, h('div', { class: 'et', testo: 'Costi diretti' }), h('div', { class: 'val', 'data-out': 'barra:costi', testo: '—' })),
-    h('div', { class: 'metrica forte' }, h('div', { class: 'et', testo: 'MdC simulato' }), h('div', { class: 'val', 'data-out': 'barra:mdc', testo: '—' })),
-    h('div', { class: 'metrica' }, h('div', { class: 'et', testo: 'Marginalità prev.' }), h('div', { class: 'val', 'data-out': 'barra:mdcpct:preventivo', testo: '—' })),
-    h('div', { class: 'metrica' }, h('div', { class: 'et', testo: 'Marginalità KOM' }), h('div', { class: 'val', 'data-out': 'barra:mdcpct:kom', testo: '—' })),
-    h('div', { class: 'metrica forte' }, h('div', { class: 'et', testo: 'Marginalità sim.' }), h('div', { class: 'val', 'data-out': 'barra:mdcpct:simulato', testo: '—' })));
+    h('span', { class: 'pillola p-neutro', id: 'semaforo', testo: '\u2014' }),
+    metrica('Ricavo simulato', 'barra:ricavo', 'secondaria'),
+    metrica('Costi diretti', 'barra:costi', 'secondaria'),
+    metrica('MdC simulato', 'barra:mdc', 'forte'),
+    metrica('Marginalità prev.', 'barra:mdcpct:preventivo', 'secondaria'),
+    metrica('Marginalità KOM', 'barra:mdcpct:kom', 'secondaria'),
+    metrica('Marginalità sim.', 'barra:mdcpct:simulato', 'forte'));
 }
 
 function datalist() {
@@ -2142,7 +2625,9 @@ function avvia() {
   document.body.appendChild(testa());
   document.body.appendChild(h('div', { id: 'radice' }));
   document.body.appendChild(h('div', { id: 'messaggio', hidden: true }));
+  document.body.appendChild(h('div', { id: 'spiegazione', hidden: true, role: 'status' }));
   document.body.appendChild(barra());
+  collegaSpiegazioni();
   document.body.appendChild(datalist());
 
   const bozza = leggiBozza();

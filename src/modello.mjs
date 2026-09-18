@@ -35,40 +35,13 @@ export const SUGGERIMENTI = {
   ],
 };
 
-export const LINEE_DEFAULT = [
-  {
-    nome: 'Quadri elettrici',
-    voci: [
-      ['materiale', 'Componenti elettrici'],
-      ['materiale', 'Carpenteria e quadro'],
-      ['materiale', 'Cavi e minuteria'],
-      ['manodopera', 'Produzione e cablaggio'],
-      ['manodopera', 'Ingegneria elettrica'],
-      ['manodopera', 'Ingegneria software'],
-      ['altri', 'Trasporti e logistica'],
-    ],
-  },
-  {
-    nome: 'Installazione cantiere',
-    voci: [
-      ['materiale', 'Materiale di installazione'],
-      ['manodopera', 'Montaggio in cantiere'],
-      ['altri', 'Trasferte e viaggi'],
-      ['altri', 'Vitto e alloggio'],
-      ['altri', 'Noleggi'],
-      ['altri', 'Subappalti e terzisti'],
-    ],
-  },
-  {
-    nome: 'Commissioning',
-    voci: [
-      ['manodopera', 'Messa in servizio'],
-      ['manodopera', 'Ingegneria software'],
-      ['altri', 'Trasferte e viaggi'],
-      ['altri', 'Vitto e alloggio'],
-    ],
-  },
-];
+export const NOMI_LINEE = ['Quadri elettrici', 'Installazione cantiere', 'Commissioning'];
+
+const ETICHETTA_CAT = {
+  materiale: 'Materiale',
+  manodopera: 'Manodopera',
+  altri: 'Altri costi diretti',
+};
 
 export function nuovaVoce(cat, nome, tariffe) {
   const v = {
@@ -81,6 +54,7 @@ export function nuovaVoce(cat, nome, tariffe) {
   if (cat === 'manodopera') {
     const t = (tariffe || []).find((x) => x.nome === nome);
     v.tariffaId = t ? t.id : null;
+    v.modo = t ? 'ore' : 'importo';
   }
   return v;
 }
@@ -93,26 +67,23 @@ export function nuovaLinea(nome) {
   return { id: id('l'), nome, ricavo: { preventivo: 0, kom: 0 }, voci: [] };
 }
 
-/** Nomi delle linee di servizio predefinite, per poterle reinserire dopo una cancellazione. */
-export function nomiLineeStandard() {
-  return LINEE_DEFAULT.map((d) => d.nome);
+/**
+ * Struttura minima di una linea: una sola voce per categoria. È il livello a cui si parte,
+ * dove per compilare una commessa bastano nove numeri in tutto. Il dettaglio per marca e
+ * per tipo di manodopera si aggiunge dopo, se serve.
+ */
+export function lineaStandard(nome, tariffe) {
+  const l = nuovaLinea(nome);
+  l.voci = ['materiale', 'manodopera', 'altri'].map((c) => nuovaVoce(c, ETICHETTA_CAT[c], tariffe));
+  return l;
 }
 
-/** Ricrea una linea standard completa delle sue voci di default. */
-export function lineaStandard(nome, tariffe) {
-  const def = LINEE_DEFAULT.find((d) => d.nome === nome);
-  const l = nuovaLinea(nome);
-  if (def) l.voci = def.voci.map(([cat, n]) => nuovaVoce(cat, n, tariffe));
-  return l;
+export function nomiLineeStandard() {
+  return NOMI_LINEE.slice();
 }
 
 export function nuovaSimulazione() {
   const tariffe = TARIFFE_DEFAULT.map((n) => nuovaTariffa(n, 0));
-  const linee = LINEE_DEFAULT.map((def) => {
-    const l = nuovaLinea(def.nome);
-    l.voci = def.voci.map(([cat, nome]) => nuovaVoce(cat, nome, tariffe));
-    return l;
-  });
   return {
     versione: VERSIONE_SCHEMA,
     meta: {
@@ -125,7 +96,7 @@ export function nuovaSimulazione() {
     },
     parametri: { sgPct: 0, ctgPct: 0, targetPct: 0, validitaTariffe: '' },
     tariffe,
-    linee,
+    linee: NOMI_LINEE.map((n) => lineaStandard(n, tariffe)),
     delta: { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: {}, voce: {} },
   };
 }
@@ -146,14 +117,20 @@ export function normalizza(raw) {
     id: l.id || id('l'),
     nome: l.nome || 'Linea',
     ricavo: { preventivo: 0, kom: 0, ...(l.ricavo || {}) },
-    voci: (l.voci || []).map((v) => ({
-      id: v.id || id('v'),
-      cat: v.cat || 'materiale',
-      nome: v.nome || 'Voce',
-      tariffaId: v.tariffaId ?? null,
-      preventivo: { q: 0, sconto: 0, ...(v.preventivo || {}) },
-      kom: { q: 0, sconto: 0, ...(v.kom || {}) },
-    })),
+    voci: (l.voci || []).map((v) => {
+      const voce = {
+        id: v.id || id('v'),
+        cat: v.cat || 'materiale',
+        nome: v.nome || 'Voce',
+        tariffaId: v.tariffaId ?? null,
+        preventivo: { q: 0, sconto: 0, ...(v.preventivo || {}) },
+        kom: { q: 0, sconto: 0, ...(v.kom || {}) },
+      };
+      if (voce.cat === 'manodopera') {
+        voce.modo = v.modo === 'ore' || v.modo === 'importo' ? v.modo : (voce.tariffaId ? 'ore' : 'importo');
+      }
+      return voce;
+    }),
   }));
   return sim;
 }
@@ -168,10 +145,56 @@ export function nomeFile(sim) {
   return `${codice}_${stamp}.json`;
 }
 
+// --- commessa di esempio -------------------------------------------------------------
+
+const ESEMPIO = {
+  'Quadri elettrici': {
+    ricavo: [240000, 232000],
+    voci: [
+      ['materiale', 'Componenti elettrici', 180000, 40, 180000, 37],
+      ['materiale', 'Carpenteria e quadro', 35000, 30, 35000, 30],
+      ['materiale', 'Cavi e minuteria', 14000, 25, 14000, 25],
+      ['manodopera', 'Produzione e cablaggio', 520, 0, 560, 0],
+      ['manodopera', 'Ingegneria elettrica', 200, 0, 210, 0],
+      ['manodopera', 'Ingegneria software', 140, 0, 160, 0],
+      ['altri', 'Trasporti e logistica', 3200, 0, 3500, 0],
+    ],
+  },
+  'Installazione cantiere': {
+    ricavo: [140000, 136000],
+    voci: [
+      ['materiale', 'Materiale di installazione', 28000, 20, 29000, 20],
+      ['manodopera', 'Montaggio in cantiere', 900, 0, 980, 0],
+      ['altri', 'Trasferte e viaggi', 12000, 0, 14000, 0],
+      ['altri', 'Vitto e alloggio', 9500, 0, 10500, 0],
+      ['altri', 'Noleggi', 6500, 0, 7000, 0],
+      ['altri', 'Subappalti e terzisti', 18000, 0, 21000, 0],
+    ],
+  },
+  Commissioning: {
+    ricavo: [86000, 84000],
+    voci: [
+      ['manodopera', 'Messa in servizio', 620, 0, 680, 0],
+      ['manodopera', 'Ingegneria software', 220, 0, 240, 0],
+      ['altri', 'Trasferte e viaggi', 13500, 0, 14500, 0],
+      ['altri', 'Vitto e alloggio', 10500, 0, 11000, 0],
+    ],
+  },
+};
+
+const TARIFFE_ESEMPIO = {
+  'Produzione e cablaggio': 38,
+  'Ingegneria elettrica': 52,
+  'Ingegneria software': 58,
+  'Montaggio in cantiere': 41,
+  'Messa in servizio': 46,
+  'Project management': 62,
+};
+
 /**
  * Commessa di esempio, dichiaratamente fittizia. Serve perché il tool si apra in uno stato
- * operativo invece che su una maschera vuota: chi lo apre la prima volta vede subito cosa fa.
- * I valori sono plausibili per una commessa di automazione industriale ma non sono dati reali.
+ * operativo invece che su una maschera vuota. I valori sono plausibili per una commessa di
+ * automazione industriale ma non sono dati reali.
  */
 export function simulazioneEsempio() {
   const s = nuovaSimulazione();
@@ -184,65 +207,20 @@ export function simulazioneEsempio() {
     note: '',
   };
   s.parametri = { sgPct: 9, ctgPct: 2, targetPct: 12, validitaTariffe: '' };
+  s.tariffe.forEach((t) => { t.eurOra = TARIFFE_ESEMPIO[t.nome] ?? 0; });
 
-  const tariffe = {
-    'Produzione e cablaggio': 38,
-    'Ingegneria elettrica': 52,
-    'Ingegneria software': 58,
-    'Montaggio in cantiere': 41,
-    'Messa in servizio': 46,
-    'Project management': 62,
-  };
-  s.tariffe.forEach((t) => { t.eurOra = tariffe[t.nome] ?? 0; });
-
-  // [nome voce, preventivo q, preventivo sconto, kom q, kom sconto]
-  const dati = {
-    'Quadri elettrici': {
-      ricavo: [240000, 232000],
-      voci: [
-        ['Componenti elettrici', 180000, 40, 180000, 37],
-        ['Carpenteria e quadro', 35000, 30, 35000, 30],
-        ['Cavi e minuteria', 14000, 25, 14000, 25],
-        ['Produzione e cablaggio', 520, 0, 560, 0],
-        ['Ingegneria elettrica', 200, 0, 210, 0],
-        ['Ingegneria software', 140, 0, 160, 0],
-        ['Trasporti e logistica', 3200, 0, 3500, 0],
-      ],
-    },
-    'Installazione cantiere': {
-      ricavo: [140000, 136000],
-      voci: [
-        ['Materiale di installazione', 28000, 20, 29000, 20],
-        ['Montaggio in cantiere', 900, 0, 980, 0],
-        ['Trasferte e viaggi', 12000, 0, 14000, 0],
-        ['Vitto e alloggio', 9500, 0, 10500, 0],
-        ['Noleggi', 6500, 0, 7000, 0],
-        ['Subappalti e terzisti', 18000, 0, 21000, 0],
-      ],
-    },
-    Commissioning: {
-      ricavo: [86000, 84000],
-      voci: [
-        ['Messa in servizio', 620, 0, 680, 0],
-        ['Ingegneria software', 220, 0, 240, 0],
-        ['Trasferte e viaggi', 13500, 0, 14500, 0],
-        ['Vitto e alloggio', 10500, 0, 11000, 0],
-      ],
-    },
-  };
-
-  for (const linea of s.linee) {
-    const d = dati[linea.nome];
-    if (!d) continue;
-    linea.ricavo = { preventivo: d.ricavo[0], kom: d.ricavo[1] };
-    for (const [nome, pq, ps, kq, ks] of d.voci) {
-      const v = linea.voci.find((x) => x.nome === nome);
-      if (!v) continue;
+  s.linee = NOMI_LINEE.map((nome) => {
+    const def = ESEMPIO[nome];
+    const l = nuovaLinea(nome);
+    l.ricavo = { preventivo: def.ricavo[0], kom: def.ricavo[1] };
+    l.voci = def.voci.map(([cat, n, pq, ps, kq, ks]) => {
+      const v = nuovaVoce(cat, n, s.tariffe);
       v.preventivo = { q: pq, sconto: ps };
       v.kom = { q: kq, sconto: ks };
-    }
-  }
-  s.delta = { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: {}, voce: {} };
+      return v;
+    });
+    return l;
+  });
   return s;
 }
 

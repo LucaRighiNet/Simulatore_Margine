@@ -26,10 +26,23 @@ const num = (v) => {
 // Internamente si lavora in frazioni.
 const frazione = (v) => num(v) / 100;
 
+/**
+ * Come si inserisce una voce di manodopera. In ore per tariffa oraria quando la tariffa
+ * aziendale è nota, ed è la forma che permette di simulare uno sforo di ore; a importo
+ * quando si sta facendo una stima rapida e le tariffe non sono ancora state impostate.
+ * Senza questa distinzione una riga di manodopera priva di tariffa costerebbe zero in
+ * silenzio, che è il modo peggiore di sbagliare un margine.
+ */
+export function modoManodopera(voce) {
+  if (voce.modo === 'ore' || voce.modo === 'importo') return voce.modo;
+  return voce.tariffaId ? 'ore' : 'importo';
+}
+
 /** Costo di una singola voce nella colonna indicata, prima degli scostamenti. */
 export function costoVoce(voce, colonna, tariffe) {
   const d = voce[colonna] || {};
   if (voce.cat === 'manodopera') {
+    if (modoManodopera(voce) === 'importo') return num(d.q);
     const t = (tariffe || []).find((x) => x.id === voce.tariffaId);
     return num(d.q) * num(t && t.eurOra);
   }

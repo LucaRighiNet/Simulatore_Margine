@@ -263,16 +263,164 @@ svg text { fill: var(--ink-2); font-family: var(--sans); }
 svg .asse { stroke: var(--linea-forte); }
 svg .griglia { stroke: var(--linea); }
 
-@media (max-width: 720px) {
-  main { padding: 12px; padding-bottom: 150px; }
-  .metrica { min-width: 66px; }
-  .metrica .val { font-size: 13px; }
-  .metrica.forte .val { font-size: 15px; }
-}
+
 
 @media print {
   .testa, .schede, .barra, .azioni, button { display: none !important; }
   main { padding: 0; padding-bottom: 0; }
   .pannello { break-inside: avoid; box-shadow: none; }
   body { background: #fff; }
+}
+
+
+/* --- scelta del livello di dettaglio --- */
+.pannello-livello .corpo { padding-top: 10px; padding-bottom: 10px; }
+.scelta-livello { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.et-livello {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-3); font-weight: 600;
+}
+.gruppo-bottoni { display: flex; flex-wrap: wrap; gap: 4px; }
+button.espandi { border-style: dashed; color: var(--accento); border-color: var(--accento); }
+button.espandi:hover { background: var(--accento-tenue); }
+button.commuta {
+  font-size: 10.5px; border: 1px solid var(--linea); border-radius: 99px;
+  padding: 1px 8px; color: var(--ink-3);
+}
+button.commuta:hover { color: var(--accento); border-color: var(--accento); }
+td.azione-riga, th.azione-riga { width: 34px; }
+
+/* --- spiegazione del calcolo --- */
+.spiegabile {
+  cursor: help;
+  border-bottom: 1px dashed var(--linea-forte);
+  -webkit-tap-highlight-color: transparent;
+}
+.spiegabile.aperta { background: var(--accento-tenue); border-bottom-color: var(--accento); }
+.spiegabile:focus-visible { outline: 2px solid var(--accento); outline-offset: 1px; }
+
+#spiegazione {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+  z-index: 60;
+  width: min(560px, calc(100% - 24px));
+  background: var(--surface);
+  border: 1px solid var(--accento);
+  border-radius: 8px;
+  box-shadow: 0 10px 34px rgba(23, 33, 44, .26);
+  padding: 10px 12px;
+}
+.titolo-spiega {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  font-weight: 600; font-size: 12.5px; margin-bottom: 5px;
+}
+.corpo-spiega {
+  font-size: 12.5px; line-height: 1.5; color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- guida --- */
+.guida p { margin: 0 0 10px; max-width: 68ch; }
+.guida p:last-child { margin-bottom: 0; }
+.guida-elenco { margin: 4px 0 10px; display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 6px 16px; }
+.guida-elenco dt { font-weight: 600; font-size: 12.5px; }
+.guida-elenco dd { margin: 0; color: var(--ink-2); font-size: 13px; max-width: 62ch; }
+
+/* --- larghezza telefono --- */
+@media (max-width: 700px) {
+  main { padding: 12px; padding-bottom: 130px; }
+
+  /* Le schede vanno a capo invece di scorrere: una scheda fuori vista è una scheda che
+     l'operatore non sa di avere. */
+  .schede { flex-wrap: wrap; overflow-x: visible; padding: 0 8px 4px; }
+  .schede button { white-space: normal; padding: 9px 10px; }
+
+  /* Testata compatta: su uno schermo alto 844 punti la sola intestazione non può
+     prendersene 110. */
+  .testa { padding: 8px 12px; gap: 6px 10px; }
+  .marchio { flex: 1 1 100%; gap: 6px; }
+  .marchio strong { font-size: 13.5px; }
+  .marchio span { font-size: 9px; padding-left: 6px; }
+  .testa .azioni { flex: 1 1 100%; }
+  .testa .azioni button { flex: 1 1 auto; font-size: 12px; padding: 7px 8px; min-height: 36px; }
+  .guida-elenco { grid-template-columns: 1fr; gap: 2px; }
+  .guida-elenco dd { margin-bottom: 8px; }
+
+  /* Le tabelle si ricompongono in blocchi verticali: ogni numero porta con sé la propria
+     etichetta, così non serve mai scorrere di lato per leggere una cifra. */
+  .tabellone { overflow-x: visible; }
+  table.tab-confronto, table.tab-dati,
+  table.tab-confronto tbody, table.tab-dati tbody,
+  table.tab-confronto tr, table.tab-dati tr,
+  table.tab-confronto td, table.tab-dati td { display: block; width: 100%; }
+  table.tab-confronto thead, table.tab-dati thead { display: none; }
+
+  table.tab-confronto tr, table.tab-dati tr {
+    border: 1px solid var(--linea);
+    border-radius: var(--r);
+    padding: 7px 10px;
+    margin-bottom: 8px;
+    background: var(--surface);
+  }
+  table.tab-confronto td, table.tab-dati td {
+    border: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 3px 0;
+    text-align: right;
+    white-space: normal;
+  }
+  table.tab-confronto td::before, table.tab-dati td::before {
+    content: attr(data-et);
+    flex: 0 1 auto;
+    text-align: left;
+    color: var(--ink-3);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    font-family: var(--sans);
+    white-space: nowrap;
+  }
+  table.tab-confronto td:first-child, table.tab-dati td:first-child {
+    display: block;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 1px solid var(--linea);
+    margin-bottom: 5px;
+    padding-bottom: 5px;
+  }
+  table.tab-confronto td:first-child::before, table.tab-dati td:first-child::before { content: none; }
+  table.tab-dati td.azione-riga { justify-content: flex-end; padding-top: 4px; }
+  table.tab-dati td.azione-riga::before { content: none; }
+  table.tab-dati td.azione-riga:empty { display: none; }
+  table.tab-dati .coppia { flex: 1 1 auto; justify-content: flex-end; }
+  table.tab-dati td input { max-width: 190px; }
+  table.tab-dati tr.cat td { border-radius: var(--r); }
+  table.tab-confronto tr.somma td:first-child,
+  table.tab-dati tr.somma td:first-child { border-bottom-color: var(--linea-forte); }
+  table.tab-incidenze td.liv1 { padding-left: 12px; }
+  table.tab-incidenze td.liv2 { padding-left: 24px; }
+
+  /* Barra risultati compatta: su uno schermo stretto sei metriche mangiano mezzo schermo. */
+  .barra { gap: 4px 14px; padding: 6px 12px; }
+  .barra .metrica.secondaria { display: none; }
+  .metrica { min-width: 0; }
+  .metrica .et { font-size: 9px; }
+  .metrica .val { font-size: 14px; }
+  .metrica.forte .val { font-size: 16px; }
+}
+
+/* --- dispositivi a tocco --- */
+@media (pointer: coarse) {
+  /* Sotto i 16px iOS ingrandisce la pagina appena si tocca un campo, e non la rimpicciolisce
+     più. Non è una preferenza estetica: è l'unico modo per evitare quello zoom. */
+  input, select, textarea { font-size: 16px; }
+  button { min-height: 38px; padding: 8px 12px; }
+  button.muto { min-height: 34px; }
+  button.commuta { min-height: 26px; }
+  .schede button { min-height: 44px; }
+  .spiegabile { border-bottom-style: dashed; }
 }

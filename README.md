@@ -15,19 +15,62 @@ Apri `dist/simulatore-margine.html`. È un file unico: nessuna installazione, ne
 account, nessun server. Si apre con un doppio clic, anche da una cartella di rete.
 
 Alla prima apertura mostra una commessa di esempio con numeri inventati, segnalata da un
-avviso: serve a far vedere come funziona. Il pulsante "Parti da zero" svuota tutto.
+avviso. Il pulsante "Parti da zero" svuota tutto e lascia la maschera minima.
 
-1. Dati di commessa: codice, cliente, parametri (spese generali, contingency, margine
-   obiettivo) e tariffe orarie. Poi, per ogni linea di servizio, il ricavo e i costi nelle
-   colonne Preventivo e KOM.
-2. Simulazione: sposta i cursori. Gli scostamenti si applicano alla colonna KOM e si
-   compongono: complessivo, poi linea, poi categoria. Il KOM non viene toccato.
-3. Confronto: le tre colonne affiancate, i due gap, la cascata del margine, l'incidenza di
-   ogni voce nelle tre colonne con la sua variazione in punti percentuali, la riserva
-   residua rispetto al margine obiettivo.
-4. Archivio: salva la simulazione. Ogni salvataggio crea una nuova voce datata.
+### Tre livelli di dettaglio
+
+Si parte dal livello Base e si espande solo quando serve, con pulsanti espliciti. Cambiare
+livello non cancella nulla: nasconde soltanto.
+
+| Livello | Cosa si compila | Quanti numeri per una commessa a tre linee |
+|---|---|---|
+| Base | ricavo, materiale e manodopera per linea, una colonna sola | 9 |
+| Intermedio | aggiunge la colonna Preventivo, gli altri costi diretti e le spese generali | 24 |
+| Completo | righe per marca fornitore e tipo di manodopera, con tariffe orarie | quanti ne servono |
+
+Al livello Base la manodopera si inserisce in euro, senza dover impostare tariffe orarie.
+Nel livello Completo ogni riga di manodopera si commuta fra importo e ore per tariffa.
+
+Una categoria con più voci compare come somma non modificabile, con un pulsante che porta
+al livello Completo. Gli altri costi diretti restano nascosti al livello Base solo finché
+sono a zero: appena valorizzati compaiono, perché un costo che abbassa il margine a schermo
+non può restare invisibile.
+
+### Le schede
+
+1. Dati di commessa: livello, dati della commessa, parametri e valori.
+2. Simulazione: cursori per gli scostamenti, con l'effetto mostrato in testa alla scheda.
+3. Confronto: tre colonne, due gap, cascata del margine, incidenza di ogni voce.
+4. Archivio: salvataggio e riapertura.
+5. Guida: cosa fa, come si legge, cosa non fa.
 
 La barra in basso resta sempre visibile e mostra il margine mentre si digita.
+
+### Vedere da dove arriva un numero
+
+Tocca (o clicca) una cella calcolata, riconoscibile dal bordino tratteggiato: compare il
+calcolo che l'ha prodotta, con i valori di partenza e gli scostamenti applicati. Sul
+desktop lo stesso testo è anche il suggerimento del browser.
+
+Sul telefono non esiste il passaggio del dito sopra una cella: il browser non ha un evento
+di hover sul touch, quindi la funzione è costruita sul tocco. Si chiude toccando fuori o
+con Esc.
+
+### Da smartphone e da iPhone
+
+Tutte le schede funzionano da 375 px in su, verificato alle larghezze degli iPhone in
+circolazione (375, 390, 393, 402, 430, 440). Nella scheda Confronto le tabelle si
+ricompongono in blocchi verticali: ogni numero porta con sé la propria etichetta, quindi
+non serve scorrere di lato per leggere una cifra.
+
+| Aspetto | Su iPhone e iPad |
+|---|---|
+| Inserimento, simulazione, confronto, spiegazione dei calcoli | funzionano |
+| Archivio in memoria del browser, Apri e Salva file | funzionano |
+| Collegamento a una cartella di rete | non disponibile: Safari non espone il selettore di cartelle e su iOS tutti i browser usano lo stesso motore, quindi il limite vale anche per Chrome ed Edge sul telefono |
+
+I campi di inserimento usano 16 px sui dispositivi a tocco: sotto quella soglia iOS
+ingrandisce la pagina al primo tocco su un campo e non la rimpicciolisce più.
 
 ### Archivio
 

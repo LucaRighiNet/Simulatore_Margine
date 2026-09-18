@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  calcola, calcolaColonna, costoVoce, fattoreVoce, gap, sensitivita, baseSimulato, incidenze, CATEGORIE,
+  calcola, calcolaColonna, costoVoce, fattoreVoce, gap, sensitivita, baseSimulato, incidenze,
+  modoManodopera, CATEGORIE,
 } from '../src/calcolo.mjs';
 import { nuovaSimulazione, simulazioneEsempio, normalizza, nomeFile } from '../src/modello.mjs';
 
@@ -37,8 +38,20 @@ test('costo manodopera è ore per tariffa oraria', () => {
   vicino(costoVoce(v, 'kom', tariffe), 5100);
 });
 
-test('manodopera senza tariffa associata costa zero, non NaN', () => {
-  const v = { cat: 'manodopera', tariffaId: null, kom: { q: 120 } };
+test('manodopera senza tariffa vale come importo, non come zero silenzioso', () => {
+  const v = { cat: 'manodopera', tariffaId: null, kom: { q: 12000 } };
+  assert.equal(modoManodopera(v), 'importo');
+  vicino(costoVoce(v, 'kom', []), 12000);
+});
+
+test('il modo esplicito vince sulla presenza della tariffa', () => {
+  const tariffe = [{ id: 'T1', nome: 'Cablaggio', eurOra: 40 }];
+  vicino(costoVoce({ cat: 'manodopera', modo: 'importo', tariffaId: 'T1', kom: { q: 900 } }, 'kom', tariffe), 900);
+  vicino(costoVoce({ cat: 'manodopera', modo: 'ore', tariffaId: 'T1', kom: { q: 900 } }, 'kom', tariffe), 36000);
+});
+
+test('manodopera in ore con tariffa mancante non produce NaN', () => {
+  const v = { cat: 'manodopera', modo: 'ore', tariffaId: 'inesistente', kom: { q: 120 } };
   assert.equal(costoVoce(v, 'kom', []), 0);
 });
 
