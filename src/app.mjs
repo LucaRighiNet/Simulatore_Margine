@@ -3,7 +3,7 @@
 // (righe, linee, scheda); digitare un numero aggiorna soltanto i valori derivati, per non
 // perdere il fuoco dal campo in cui si sta scrivendo.
 
-import { calcola, calcolaColonna, sensitivita, gap, baseSimulato, incidenze, modoManodopera, RIFERIMENTI_INCIDENZA, COLONNE, CATEGORIE, ETICHETTA_CATEGORIA, ETICHETTA_COLONNA } from './calcolo.mjs';
+import { calcola, calcolaColonna, sensitivita, gap, baseSimulato, incidenze, modoManodopera, scostamentoPerMargine, LEVE, RIFERIMENTI_INCIDENZA, COLONNE, CATEGORIE, ETICHETTA_CATEGORIA, ETICHETTA_COLONNA } from './calcolo.mjs';
 import { nuovaSimulazione, simulazioneEsempio, eEsempio, normalizza, nuovaVoce, nuovaLinea, nuovaTariffa, lineaStandard, nomiLineeStandard, SUGGERIMENTI, nomeFile } from './modello.mjs';
 import {
   modo, salva, elenca, elimina, scegliCartella, supportaCartella, ripristinaCartella,
@@ -45,6 +45,8 @@ const etichettaLivello = (k) => (LIVELLI.find((x) => x[0] === k) || [])[1] || k;
 const usaStruttura = () => Number(sim.parametri.sgPct || 0) !== 0 || Number(sim.parametri.ctgPct || 0) !== 0;
 let scheda = 'dati';
 let riferimentoIncidenza = 'cd';
+let levaMargine = 'costi';
+let margineVoluto = null;
 let elencoArchivio = [];
 let messaggio = null;
 let ripristino = null;
@@ -300,14 +302,26 @@ function pannelloParametri() {
  * stessa colonna, una riga con lo sconto e una senza finiscono con l'input di larghezza
  * diversa e il bordo destro sfalsato.
  */
+const L_VOCE = 300;
+const L_VALORE = 200;
+const L_AZIONE = 48;
+
 function colonneTabella(nValori, conAzione) {
-  const azione = conAzione ? 5 : 0;
-  const voce = 30;
-  const larghezza = ((100 - voce - azione) / (nValori + 1)).toFixed(3);
+  // Percentuali ricavate dalle larghezze di riferimento: con le percentuali la tabella
+  // si restringe insieme alla finestra, con i pixel resterebbe rigida e finirebbe per
+  // uscire dallo schermo.
+  const totale = larghezzaTabella(nValori, conAzione);
+  const q = (px) => ((px / totale) * 100).toFixed(3) + '%';
   return h('colgroup', {},
-    h('col', { style: `width:${voce}%` }),
-    ...Array.from({ length: nValori + 1 }, () => h('col', { style: `width:${larghezza}%` })),
-    conAzione ? h('col', { style: `width:${azione}%` }) : null);
+    h('col', { style: `width:${q(L_VOCE)}` }),
+    ...Array.from({ length: nValori + 1 }, () => h('col', { style: `width:${q(L_VALORE)}` })),
+    conAzione ? h('col', { style: `width:${q(L_AZIONE)}` }) : null);
+}
+
+/** Oltre questa larghezza la tabella smette di allargarsi: le colonne non hanno nulla da
+ *  farci con lo spazio in più, e il numero finirebbe lontano dalla voce a cui si riferisce. */
+function larghezzaTabella(nValori, conAzione) {
+  return L_VOCE + L_VALORE * (nValori + 1) + (conAzione ? L_AZIONE : 0);
 }
 
 /**
@@ -364,8 +378,11 @@ function rigaVoce(linea, iL, voce, iV) {
     const ore = modoManodopera(voce) === 'ore';
     celleNome.push(h('div', { class: 'riga-tariffa' },
       h('button', {
-        class: 'muto commuta', testo: ore ? 'ore x tariffa' : 'importo in euro',
-        title: 'Passa da ore per tariffa a importo diretto',
+        class: 'muto commuta', testo: ore ? 'ore' : '\u20ac',
+        title: ore
+          ? 'Inserita in ore per tariffa oraria. Premi per passare a importo diretto in euro.'
+          : 'Inserita come importo in euro. Premi per passare a ore per tariffa oraria.',
+        'aria-label': ore ? 'Manodopera in ore per tariffa' : 'Manodopera come importo',
         onclick: () => {
           voce.modo = ore ? 'importo' : 'ore';
           if (voce.modo === 'ore' && !voce.tariffaId && sim.tariffe.length) voce.tariffaId = sim.tariffe[0].id;
@@ -427,7 +444,10 @@ function tabellaLineaDettagliata(linea, iL) {
     ...[...cols, 'simulato'].map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `mdclinea:${linea.id}:${c}`, testo: '\u2014' })),
     h('td', { class: 'azione-riga' })));
 
-  return h('div', { class: 'tabellone' }, h('table', { class: 'tab-dati tab-fissa' },
+  return h('div', { class: 'tabellone' }, h('table', {
+    class: 'tab-dati tab-fissa',
+    style: `max-width:${larghezzaTabella(cols.length, true)}px`,
+  },
     colonneTabella(cols.length, true),
     h('thead', {}, h('tr', {},
       h('th', { testo: 'Voce' }),
@@ -485,7 +505,10 @@ function tabellaLineaSemplice(linea, iL) {
     h('td', { 'data-et': 'Voce', testo: 'Margine di contribuzione' }),
     ...[...cols, 'simulato'].map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `mdclinea:${linea.id}:${c}`, testo: '\u2014' }))));
 
-  return h('div', { class: 'tabellone' }, h('table', { class: 'tab-dati tab-fissa' },
+  return h('div', { class: 'tabellone' }, h('table', {
+    class: 'tab-dati tab-fissa',
+    style: `max-width:${larghezzaTabella(cols.length, false)}px`,
+  },
     colonneTabella(cols.length, false),
     h('thead', {}, h('tr', {},
       h('th', { testo: 'Categoria' }),
@@ -528,7 +551,7 @@ function pannelloLivello() {
         h('span', { class: 'et-livello', testo: 'Livello di dettaglio' }),
         h('div', { class: 'gruppo-bottoni' },
           ...LIVELLI.map(([k, et]) => h('button', {
-            class: livello === k ? 'primario' : '', testo: et,
+            class: livello === k ? 'selezionato' : '', testo: et,
             'aria-pressed': livello === k ? 'true' : 'false',
             onclick: () => { livello = k; disegna(); },
           })))),
@@ -644,6 +667,57 @@ function riepilogoSimulazione() {
           h('td', { class: 'n', 'data-et': 'Variazione', 'data-out': `cmp:${k}:delta:${f}`, testo: '\u2014' })))))))); 
 }
 
+/**
+ * Terza via di simulazione, oltre a costi e ricavi: si parte dal margine che si vuole
+ * ottenere e lo strumento dice quale scostamento serve. Il risultato non è una risposta
+ * chiusa: diventa uno scostamento normale, visibile nei cursori, modificabile e
+ * annullabile come se fosse stato inserito a mano.
+ */
+function pannelloMargine() {
+  const valore = margineVoluto === null ? (sim.parametri.targetPct || 0) : margineVoluto;
+
+  const applica = () => {
+    const r = scostamentoPerMargine(sim, valore, levaMargine);
+    if (!r.possibile) { avvisa(r.motivo); return; }
+    const campo = levaMargine === 'costi' ? 'globale' : 'ricavo';
+    // Arrotondato al centesimo di punto: un cursore con quindici decimali non si legge e
+    // non si ritocca, e sul margine la differenza è sotto il decimo di punto.
+    const scostamento = Math.round(r.deltaPct * 100) / 100;
+    conAnnulla(
+      `Applicato ${percRel(scostamento)} su ${levaMargine === 'costi' ? 'tutti i costi' : 'tutti i ricavi'} per raggiungere il ${perc(valore / 100)}.`,
+      () => { sim.delta = { ...(sim.delta || {}), [campo]: scostamento }; },
+    );
+  };
+
+  return h('section', { class: 'pannello' },
+    h('h2', { testo: 'Partire dal margine' }),
+    h('div', { class: 'corpo' },
+      h('div', { class: 'riga-margine' },
+        h('label', { class: 'campo' },
+          h('span', { testo: 'Margine da raggiungere %' }),
+          h('input', {
+            type: 'text', inputmode: 'decimal', class: 'num', id: 'c-margine-voluto',
+            value: String(valore).replace('.', ','),
+            oninput: (e) => { margineVoluto = leggiNumero(e.target.value); aggiornaDerivati(); },
+          })),
+        h('div', { class: 'scelta-leva' },
+          h('span', { class: 'et-livello', testo: 'Agendo su' }),
+          h('div', { class: 'gruppo-bottoni' },
+            ...Object.entries(LEVE).map(([k, et]) => h('button', {
+              class: levaMargine === k ? 'selezionato' : '', testo: et,
+              'aria-pressed': levaMargine === k ? 'true' : 'false',
+              onclick: () => { levaMargine = k; disegna(); },
+            }))))),
+      h('p', { class: 'esito-margine', id: 'esito-margine', testo: '' }),
+      h('div', { class: 'azioni' },
+        h('button', { class: 'primario', testo: 'Applica lo scostamento', onclick: applica }),
+        h('button', {
+          testo: 'Azzera gli scostamenti',
+          onclick: () => { sim.delta = { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: {}, voce: {} }; disegna(); },
+        })),
+      h('p', { class: 'nota', testo: 'Lo scostamento calcolato finisce nei cursori qui sotto: da lì lo puoi ritoccare, distribuire su una singola linea o annullare.' })));
+}
+
 function schedaSimulazione() {
   const globali = h('div', { class: 'cursori' },
     cursore('Tutti i costi', 'delta.globale', sim.delta.globale),
@@ -660,6 +734,7 @@ function schedaSimulazione() {
 
   return h('div', {},
     riepilogoSimulazione(),
+    pannelloMargine(),
     h('section', { class: 'pannello' },
       h('h2', { testo: 'Scostamenti complessivi' }),
       h('div', { class: 'corpo' }, globali,
@@ -734,7 +809,7 @@ function pannelloIncidenze() {
       h('div', { class: 'azioni', style: 'margin-bottom:8px;align-items:center' },
         h('strong', { style: 'font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)', testo: 'Incidenza su' }),
         ...Object.entries(RIFERIMENTI_INCIDENZA).map(([k, et]) => h('button', {
-          class: riferimentoIncidenza === k ? 'primario' : '', testo: et,
+          class: riferimentoIncidenza === k ? 'selezionato' : '', testo: et,
           onclick: () => { riferimentoIncidenza = k; disegna(); },
         }))),
       h('p', { class: 'nota', style: 'margin-top:0', testo: spiegazione }),
@@ -819,6 +894,17 @@ function schedaGuida() {
           ['Completo', 'Righe per marca fornitore e tipo di manodopera, con tariffe orarie. È il livello per il budget esecutivo.'],
         ]),
         h('p', { class: 'nota' }, 'Scendere di livello non cancella niente: nasconde soltanto. Una categoria con più voci compare come somma non modificabile finché non torni al livello Completo.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Tre modi di simulare' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'Nella scheda Simulazione puoi partire da qualunque delle tre grandezze, a seconda della domanda che ti stai facendo. Non sono modalità che si escludono: agiscono tutte sugli stessi cursori.'),
+        vociGuida([
+          ['Dai costi', 'Muovi i cursori dei costi, per linea o per categoria, e guardi dove finisce il margine. È la domanda "se sforo, cosa succede".'],
+          ['Dai ricavi', 'Muovi i cursori dei ricavi per simulare uno sconto in trattativa o una variante riconosciuta. È la domanda "quanto posso concedere".'],
+          ['Dal margine', 'Scrivi il margine che vuoi ottenere e scegli se agire sui costi o sui ricavi: lo strumento calcola lo scostamento necessario e te lo mostra prima di applicarlo. È la domanda "cosa servirebbe per arrivarci".'],
+        ]),
+        h('p', { class: 'nota' }, 'Il calcolo che parte dal margine non dà una risposta chiusa: produce uno scostamento normale, che finisce nei cursori e da lì si ritocca, si distribuisce su una singola linea o si annulla.'))),
 
     h('section', { class: 'pannello' },
       h('h2', { testo: 'Come vedere da dove arriva un numero' }),
@@ -1312,6 +1398,25 @@ function aggiornaDerivati() {
       scrivi(`cmp:${k}:delta:${formato}`, euroSegnato(d), positivo ? 'v-buono' : 'v-critico');
     }
   }
+  const esito = $('#esito-margine');
+  if (esito) {
+    const voluto = margineVoluto === null ? (sim.parametri.targetPct || 0) : margineVoluto;
+    const res = scostamentoPerMargine(sim, voluto, levaMargine);
+    esito.className = 'esito-margine';
+    if (!res.possibile) {
+      esito.textContent = res.motivo;
+      esito.classList.add('esito-nulla');
+    } else if (res.negativo) {
+      esito.textContent = `Con questi ricavi il ${perc(voluto / 100)} non è raggiungibile agendo sui costi: servirebbero costi negativi. Prova con i ricavi.`;
+      esito.classList.add('esito-nulla');
+    } else {
+      const su = res.leva === 'costi' ? 'tutti i costi' : 'tutti i ricavi';
+      esito.textContent = `Per arrivare al ${perc(voluto / 100)} serve ${percRel(res.deltaPct)} su ${su}: `
+        + `da ${euro(res.attuale)} a ${euro(res.richiesto)}, ${euroSegnato(res.variazione)}.`;
+      esito.classList.add(res.deltaPct === 0 ? 'esito-nulla' : (res.leva === 'costi' ? (res.deltaPct < 0 ? 'esito-sforzo' : 'esito-agio') : (res.deltaPct > 0 ? 'esito-sforzo' : 'esito-agio')));
+    }
+  }
+
   const nb = $('#base-simulazione');
   if (nb) {
     nb.textContent = r.baseSimulazione === 'kom'

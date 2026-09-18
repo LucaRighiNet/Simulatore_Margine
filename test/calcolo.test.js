@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   calcola, calcolaColonna, costoVoce, fattoreVoce, gap, sensitivita, baseSimulato, incidenze,
-  modoManodopera, CATEGORIE,
+  modoManodopera, scostamentoPerMargine, CATEGORIE,
 } from '../src/calcolo.mjs';
 import { nuovaSimulazione, simulazioneEsempio, normalizza, nomeFile } from '../src/modello.mjs';
 
@@ -304,4 +304,68 @@ test('con denominatore nullo l incidenza è n.d. e non infinito', () => {
     for (const v of Object.values(r.valori)) assert.equal(v, null);
     assert.equal(r.dPreventivoKom, null);
   }
+});
+
+test('partendo dal margine, lo scostamento sui costi lo centra esattamente', () => {
+  const sim = simMinima({ rKom: 1000000, cKom: 850000, sg: 9, ctg: 2, target: 12 });
+  const r = scostamentoPerMargine(sim, 12, 'costi');
+  assert.ok(r.possibile);
+  sim.delta = { globale: r.deltaPct };
+  vicino(calcolaColonna(sim, 'simulato').miPct, 0.12, 1e-9);
+});
+
+test('partendo dal margine, lo scostamento sui ricavi lo centra esattamente', () => {
+  const sim = simMinima({ rKom: 1000000, cKom: 850000, sg: 9, ctg: 2, target: 12 });
+  const r = scostamentoPerMargine(sim, 12, 'ricavi');
+  assert.ok(r.possibile);
+  sim.delta = { ricavo: r.deltaPct };
+  vicino(calcolaColonna(sim, 'simulato').miPct, 0.12, 1e-9);
+});
+
+test('il calcolo inverso funziona anche senza costi di struttura', () => {
+  const sim = simMinima({ rKom: 500000, cKom: 400000 });
+  for (const leva of ['costi', 'ricavi']) {
+    const s = simMinima({ rKom: 500000, cKom: 400000 });
+    const r = scostamentoPerMargine(s, 25, leva);
+    assert.ok(r.possibile, leva);
+    s.delta = leva === 'costi' ? { globale: r.deltaPct } : { ricavo: r.deltaPct };
+    vicino(calcolaColonna(s, 'simulato').miPct, 0.25, 1e-9);
+  }
+  void sim;
+});
+
+test('il calcolo inverso parte dallo stato simulato corrente, scostamenti inclusi', () => {
+  const sim = simMinima({ rKom: 1000000, cKom: 800000, sg: 10 });
+  sim.delta = { globale: 15, ricavo: -5 };
+  const r = scostamentoPerMargine(sim, 10, 'costi');
+  sim.delta = { ...sim.delta, globale: r.deltaPct };
+  vicino(calcolaColonna(sim, 'simulato').miPct, 0.10, 1e-9);
+});
+
+test('sull esempio reale il margine obiettivo si raggiunge da entrambe le leve', () => {
+  for (const leva of ['costi', 'ricavi']) {
+    const s = simulazioneEsempio();
+    const r = scostamentoPerMargine(s, 12, leva);
+    assert.ok(r.possibile, leva);
+    s.delta = { ...s.delta, ...(leva === 'costi' ? { globale: r.deltaPct } : { ricavo: r.deltaPct }) };
+    vicino(calcolaColonna(s, 'simulato').miPct, 0.12, 1e-9);
+  }
+});
+
+test('un margine irraggiungibile o dati mancanti danno un motivo, non un numero', () => {
+  const vuota = nuovaSimulazione();
+  assert.equal(scostamentoPerMargine(vuota, 12, 'costi').possibile, false);
+  assert.equal(scostamentoPerMargine(vuota, 12, 'ricavi').possibile, false);
+  const s = simMinima({ rKom: 1000, cKom: 800 });
+  const r = scostamentoPerMargine(s, 100, 'costi');
+  assert.equal(r.possibile, false);
+  assert.match(r.motivo, /100%/);
+});
+
+test('per alzare il margine i costi devono scendere e i ricavi salire', () => {
+  const s = simMinima({ rKom: 1000000, cKom: 900000 });  // marginalita 10%
+  const c = scostamentoPerMargine(s, 20, 'costi');
+  const v = scostamentoPerMargine(s, 20, 'ricavi');
+  assert.ok(c.deltaPct < 0, 'i costi devono scendere');
+  assert.ok(v.deltaPct > 0, 'i ricavi devono salire');
 });

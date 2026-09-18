@@ -138,6 +138,37 @@ compongono in modo moltiplicativo dal generale al particolare:
 Questo è il cuore del tool: il baseline resta intatto e sempre confrontabile, e il PM
 ragiona per leve ("materiale quadri +8%", "ore cantiere +15%") invece che per importi.
 
+### 2.4bis Da quale grandezza si parte
+
+La simulazione si può pilotare da tre punti, secondo la domanda che si sta facendo. Non
+sono modalità alternative: tutte producono lo stesso oggetto, uno scostamento percentuale
+sui cursori.
+
+| Si parte da | Domanda | Come funziona |
+|---|---|---|
+| Costi | se sforo, cosa succede al margine | scostamenti diretti, per linea e per categoria |
+| Ricavi | quanto posso concedere in trattativa | scostamenti sui ricavi, complessivi o per linea |
+| Margine | cosa servirebbe per arrivarci | calcolo inverso: si scrive il margine voluto e si sceglie la leva |
+
+Il calcolo inverso, con k somma di costi di struttura e riserva:
+
+    MI = R - CD(1+k)   e   MI/R = m   =>   CD(1+k) = R(1-m)
+
+    leva costi:   CD_obiettivo = R(1-m)/(1+k),  poi  delta = CD_obiettivo/CD_senza_delta - 1
+    leva ricavi:  R_obiettivo  = CD(1+k)/(1-m),  poi  delta = R_obiettivo/R_senza_delta - 1
+
+Due scelte di progetto su questo punto:
+
+1. Il risultato non è una risposta chiusa ma uno scostamento ordinario, che finisce nei
+   cursori. Resta visibile, ritoccabile, distribuibile su una singola linea e annullabile.
+   Un calcolo inverso che scrivesse direttamente i valori sarebbe una scatola nera.
+2. Il calcolo parte dallo stato simulato corrente, scostamenti già applicati inclusi, non
+   dal KOM. Altrimenti applicarlo cancellerebbe in silenzio il lavoro fatto prima.
+
+Casi in cui non si risponde con un numero: margine richiesto pari o superiore al 100%,
+costi o ricavi di partenza a zero, e il caso in cui il margine richiesto imporrebbe costi
+negativi. In tutti l'interfaccia dice perché, e nell'ultimo suggerisce l'altra leva.
+
 ### 2.5 I tre baseline a confronto
 
 Il modello non ha un solo baseline ma tre istanze della stessa struttura dati, confrontate

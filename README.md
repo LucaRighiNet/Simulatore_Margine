@@ -43,7 +43,10 @@ non può restare invisibile.
    costi aziendali non imputati a nessuna commessa, che il controllo di gestione ribalta in
    proporzione ai costi diretti) e "Riserva per imprevisti %". Lasciandoli a zero
    spariscono da tutte le tabelle e il margine è semplicemente ricavo meno costi diretti.
-2. Simulazione: cursori per gli scostamenti, con l'effetto mostrato in testa alla scheda.
+2. Simulazione: si parte dai costi, dai ricavi o dal margine. Nei primi due casi si muovono
+   i cursori; nel terzo si scrive il margine voluto e si sceglie se agire su costi o
+   ricavi, e lo strumento calcola lo scostamento necessario mostrandolo prima di
+   applicarlo. L'effetto è sempre visibile in testa alla scheda.
 3. Confronto: tre colonne, due gap, cascata del margine, incidenza di ogni voce.
 4. Archivio: salvataggio e riapertura.
 5. Guida: cosa fa, come si legge, cosa non fa.

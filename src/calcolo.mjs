@@ -327,3 +327,74 @@ export function incidenze(sim, risultato, riferimento = 'cd') {
   }
   return { riferimento, righe };
 }
+
+export const LEVE = {
+  costi: 'Costi',
+  ricavi: 'Ricavi',
+};
+
+/**
+ * Calcolo inverso: dato il margine che si vuole raggiungere, quale scostamento serve.
+ *
+ * Il margine di riferimento è quello industriale, che coincide con il margine di
+ * contribuzione quando costi di struttura e riserva sono a zero:
+ *   MI = R - CD(1+k),  con k = struttura + riserva
+ *   MI/R = m  =>  CD(1+k) = R(1-m)
+ *
+ * Agendo sui costi, il ricavo resta quello simulato e si cerca CD; agendo sui ricavi,
+ * restano i costi e si cerca R. Il risultato è uno scostamento percentuale complessivo,
+ * cioè la stessa leva che il PM muove a mano: resta visibile, modificabile e annullabile.
+ */
+export function scostamentoPerMargine(sim, marginePct, leva) {
+  const m = frazione(marginePct);
+  const p = sim.parametri || {};
+  const k = frazione(p.sgPct) + frazione(p.ctgPct);
+  const attuale = calcolaColonna(sim, 'simulato');
+
+  const senza = (campo) => calcolaColonna(
+    { ...sim, delta: { ...(sim.delta || {}), [campo]: 0 } },
+    'simulato',
+  );
+
+  if (m >= 1) {
+    return { possibile: false, motivo: 'Un margine del 100% o più non è raggiungibile.' };
+  }
+
+  if (leva === 'costi') {
+    if (!(attuale.ricavo > 0)) {
+      return { possibile: false, motivo: 'Serve un ricavo maggiore di zero per calcolare i costi ammessi.' };
+    }
+    const base = senza('globale').cd;
+    if (!(base > 0)) {
+      return { possibile: false, motivo: 'Serve almeno un costo inserito su cui agire.' };
+    }
+    const richiesto = (attuale.ricavo * (1 - m)) / (1 + k);
+    return {
+      possibile: true,
+      leva: 'costi',
+      deltaPct: (richiesto / base - 1) * 100,
+      attuale: attuale.cd,
+      richiesto,
+      variazione: richiesto - attuale.cd,
+      negativo: richiesto < 0,
+    };
+  }
+
+  if (!(attuale.cd > 0)) {
+    return { possibile: false, motivo: 'Serve almeno un costo inserito per calcolare il ricavo necessario.' };
+  }
+  const base = senza('ricavo').ricavo;
+  if (!(base > 0)) {
+    return { possibile: false, motivo: 'Serve un ricavo di partenza maggiore di zero su cui agire.' };
+  }
+  const richiesto = (attuale.cd * (1 + k)) / (1 - m);
+  return {
+    possibile: true,
+    leva: 'ricavi',
+    deltaPct: (richiesto / base - 1) * 100,
+    attuale: attuale.ricavo,
+    richiesto,
+    variazione: richiesto - attuale.ricavo,
+    negativo: false,
+  };
+}
