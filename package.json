@@ -1,0 +1,13 @@
+{
+  "name": "simulatore-margine",
+  "version": "1.0.0",
+  "description": "Simulatore di margine di commessa per i PM - Righi Solutions",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\"",
+    "build": "node tools/build.mjs",
+    "cpm": "node tools/cpm.mjs",
+    "dev": "npx --yes http-server src -p 8080 -c-1"
+  }
+}

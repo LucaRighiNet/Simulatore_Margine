@@ -143,15 +143,20 @@ ragiona per leve ("materiale quadri +8%", "ore cantiere +15%") invece che per im
 Il modello non ha un solo baseline ma tre istanze della stessa struttura dati, confrontate
 affiancate:
 
-| Colonna | Che cos'e' | Chi la inserisce | Quando si congela |
-|---|---|---|---|
-| Preventivo | marginalita' stimata in fase di offerta | commerciale / ufficio preventivi | alla presentazione dell'offerta |
-| KOM | budget esecutivo concordato al kick off meeting, dopo acquisizione ordine | PM con controllo di gestione | al KOM, e non si tocca piu' |
-| Simulato | scenario what-if corrente | PM, in autonomia | mai, e' lo scenario di lavoro |
+| Colonna | Che cos'è | Da dove arriva il numero |
+|---|---|---|
+| Preventivo | marginalità stimata in fase di offerta | il PM la trascrive dall'offerta |
+| KOM | budget concordato al kick off meeting | il PM la trascrive dal KOM |
+| Simulato | scenario what-if corrente | derivata, mai digitata |
+
+Vincolo di semplicità: le tre colonne si compilano in un'unica sessione di lavoro. Non
+esiste un ciclo di vita, non esiste un congelamento con autorizzazione, non esiste un
+obbligo di tornare ad aggiornarle. Preventivo e KOM sono numeri di riferimento che il PM
+trascrive, non record da mantenere.
 
 Regola di derivazione: gli scostamenti percentuali della simulazione si applicano alla
-colonna KOM, che e' il budget di cui il PM risponde. Se il KOM non e' ancora stato fatto,
-il simulato deriva dal Preventivo e l'interfaccia lo dichiara esplicitamente.
+colonna KOM, che è il budget di cui il PM risponde. Se il KOM non c'è ancora, il simulato
+deriva dal Preventivo e l'interfaccia lo dichiara.
 
 Le colonne Preventivo e KOM hanno ciascuna il proprio ricavo, non solo i propri costi. E'
 un punto non negoziabile: fra offerta e ordine il prezzo cambia quasi sempre (sconto di
@@ -241,9 +246,9 @@ Schermata unica con quattro zone:
    in euro, in percentuale e in punti percentuali, e il waterfall del margine.
 
 Selettore di colonna attiva in testata (Preventivo, KOM, Simulato): determina quale delle
-tre istanze si sta compilando. Preventivo e KOM, una volta congelati, diventano di sola
-lettura con uno sblocco esplicito, per evitare che il budget di riferimento venga
-riscritto a posteriori.
+tre istanze si sta compilando. Nessun congelamento, nessuna autorizzazione, nessun blocco
+di modifica: il PM scrive dove vuole e quando vuole, la simulazione vale per la sessione in
+corso e finisce nell'archivio così com'è.
 
 ### 3.2 Vista semplice e vista dettagliata
 
@@ -269,119 +274,191 @@ struttura. Mitigazioni previste:
 |---|---|
 | Duplica colonna | il KOM nasce come copia del Preventivo, il PM modifica solo le righe cambiate |
 | Evidenza delle righe modificate | marcatore sulle sole voci che differiscono dalla colonna di origine |
-| Colonna Preventivo opzionale | se l'offerta non e' disponibile in forma analitica, si inserisce il solo totale di riga o il solo margine di offerta, e il confronto resta possibile al livello disponibile |
-| Simulato sempre derivato | non si inserisce mai a mano: e' KOM piu' scostamenti percentuali |
+| Colonna Preventivo opzionale | se l'offerta non è disponibile in forma analitica, si inserisce il solo totale di riga o il solo margine di offerta, e il confronto resta possibile al livello disponibile |
+| Simulato sempre derivato | non si inserisce mai a mano: è KOM più scostamenti percentuali |
+| Parti da una simulazione esistente | si apre una simulazione dall'archivio, si cambiano i numeri, si salva come nuova. Nessun template da mantenere |
 
-## 4. Architettura: opzioni a confronto
+## 4. Archivio delle simulazioni
 
-| Opzione | Descrizione | Pro | Contro | Effort v1 |
-|---|---|---|---|---|
-| A. Web app statica (raccomandata) | HTML+JS autoconsistente, nessun server; salvataggio su file JSON, link condivisibile, export Excel | zero infrastruttura, zero IT ops, nessun dato personale su server, funziona anche offline | nessun consolidamento automatico tra commesse, nessuno storico centrale | 5-6 gg/uomo |
-| B. Web app + backend leggero | come A più database condiviso e archivio commesse | storico, confronto tra commesse, accesso multiutente | richiede hosting, backup, gestione accessi, referente IT | 12-15 gg/uomo |
-| C. Template Excel | foglio strutturato con scenari | familiare, zero adozione | versioni divergenti, formule rotte, nessun controllo, difficile da aggiornare | 2-3 gg/uomo |
-| D. Integrazione ERP/gestionale | lettura diretta dei consuntivi | dati reali, nessun reinserimento | dipende dal gestionale in uso, tempi e costi di un ordine di grandezza superiori | da valutare |
+Requisito: nessuna storicizzazione, nessun consuntivo da aggiornare nel tempo, solo un
+archivio dove le simulazioni vengono salvate.
 
-Raccomandazione: partire da A. Il valore del tool sta nel ragionamento what-if, non
-nell'archiviazione. L'opzione B ha senso come fase 2, solo se il pilota dimostra che i PM
-lo usano davvero. L'opzione D va valutata separatamente e solo dopo aver chiarito quale
-gestionale alimenta oggi il budget di commessa.
+### 4.1 Cosa significa, in concreto
 
-Nota su C: è l'alternativa onesta da considerare. Viene scartata non perché Excel non sia
-adeguato al calcolo, ma perché su una popolazione di più PM il file si moltiplica in varianti
-non allineate e il confronto tra commesse diventa impossibile.
+| Principio | Traduzione operativa |
+|---|---|
+| Istantanee, non record | ogni salvataggio crea una nuova voce di archivio, datata. Non si aggiorna una voce esistente |
+| Nessun obbligo di ritorno | nessuna scadenza, nessun promemoria, nessun avanzamento da compilare. Una simulazione non "invecchia", resta valida come fotografia della data in cui è stata fatta |
+| Nessun ciclo di vita | nessuno stato bozza/approvato/chiuso, nessuna autorizzazione, nessun workflow |
+| Riaprire serve a ripartire | aprire una simulazione la ricarica nella maschera come punto di partenza; salvando si crea una nuova voce, l'originale resta intatto |
+| Cancellare è libero | il PM elimina dall'archivio ciò che non gli serve, senza conseguenze |
 
-### 4.1 Stack tecnico per l'opzione A
+Conseguenza sul modello: le colonne Preventivo e KOM perdono ogni apparato di congelamento
+e autorizzazione descritto nelle versioni precedenti di questo documento. Sono campi di
+input come gli altri.
 
-- Pagina HTML singola, JavaScript senza framework e senza build step.
+### 4.2 Dove vive l'archivio: verifica tecnica, non opinione
+
+La soluzione apparentemente ovvia (archivio nel browser, in localStorage) è stata scartata
+sulla base di una verifica diretta, eseguita in Chromium su questo ambiente.
+
+| Contesto | Origin | Secure context | localStorage | Selettore cartella | IndexedDB |
+|---|---|---|---|---|---|
+| pagina aperta da file (`file://`) | `null`, opaco | sì | funziona, ma isolato per singolo percorso del file | raggiungibile | disponibile |
+| pagina servita da un'origine reale (`http://127.0.0.1`) | reale | sì | funziona | raggiungibile | disponibile |
+
+Verifica eseguita con Chromium headless (build Playwright 1194): due file HTML nella stessa
+cartella, aperti da percorso locale, vedono ciascuno esclusivamente la propria chiave di
+localStorage. Lo storage è agganciato al percorso esatto del file.
+
+Implicazione pratica, che è il motivo dello scarto: se il file HTML viene spostato,
+rinominato o copiato in un'altra cartella di rete, l'archivio delle simulazioni non è più
+raggiungibile. Su una cartella condivisa aziendale, dove i file vengono riorganizzati, è
+questione di tempo. Si aggiunge che la cancellazione dei dati di navigazione del browser
+cancella l'archivio senza preavviso, e che Firefox blocca del tutto localStorage sulle
+pagine aperte da file locale.
+
+Nota di metodo: la verifica è stata condotta in modalità headless. È attendibile sul
+comportamento dello storage, che dipende dal motore; una conferma sul browser realmente in
+uso in azienda va fatta durante il pilota, non prima.
+
+### 4.3 Soluzione proposta: una cartella di rete, un file per simulazione
+
+| Elemento | Scelta |
+|---|---|
+| Unità di archivio | un file JSON per simulazione |
+| Nome file | generato: `codicecommessa_AAAA-MM-GG_hhmm.json` |
+| Collocazione | una cartella di rete aziendale scelta una volta dall'utente |
+| Lettura dell'elenco | la maschera legge la cartella e mostra l'elenco con commessa, cliente, data, margine simulato |
+| Tecnologia | File System Access API (selettore di cartella), disponibile su Chrome ed Edge desktop dalla versione 86 |
+| Fallback universale | pulsanti Scarica e Apri file, funzionanti su qualsiasi browser, senza elenco automatico |
+| localStorage | usato solo per il salvataggio automatico del lavoro in corso, come recupero da chiusura accidentale. Dichiaratamente temporaneo, mai come archivio |
+
+Perché questa soluzione regge il requisito: l'archivio è composto da file ordinari su una
+share aziendale. Sopravvive alla pulizia del browser, è visibile da Esplora risorse, è
+incluso nel backup aziendale esistente, è condivisibile fra PM allegandolo a una mail, e
+non richiede alcun server, database o account.
+
+Limite dichiarato: il selettore di cartella non è supportato da Firefox e Safari, che
+espongono solo lo storage privato dell'origine e non i selettori su disco. Su quei browser
+resta il fallback Scarica/Apri, che funziona ma senza elenco automatico. Se il browser
+standard aziendale è Edge o Chrome il limite è teorico; va confermato.
+
+### 4.4 Opzioni scartate, con motivo
+
+| Opzione | Motivo dello scarto |
+|---|---|
+| Archivio in localStorage | agganciato al percorso del file, cancellabile dalla pulizia del browser, non condivisibile, bloccato da Firefox su file locale (verificato) |
+| Database e backend | contraddice il requisito: introduce hosting, backup, account, manutenzione. Nessuna esigenza del tool lo giustifica |
+| Foglio Excel condiviso come archivio | conflitti di scrittura simultanea, versioni divergenti, formule modificabili per errore |
+| Integrazione con il gestionale | è esattamente la storicizzazione che il requisito esclude |
+
+## 5. Architettura applicativa
+
+| Opzione | Pro | Contro | Effort v1 |
+|---|---|---|---|
+| A. Pagina HTML singola, nessun server (raccomandata) | zero infrastruttura, zero IT ops, nessun account, apribile da cartella di rete | il selettore di cartella richiede Chrome o Edge | 5-6 gg/uomo |
+| B. Pagina servita da un'origine interna | storage più solido, nessuna dipendenza dal percorso del file | richiede un web server interno e un referente IT | piu' 1-2 gg |
+| C. Template Excel | familiare, zero adozione | versioni divergenti, formule rotte, nessun controllo | 2-3 gg/uomo |
+
+Raccomandazione: A. L'opzione B diventa sensata solo se durante il pilota emergono
+problemi di storage, ed è un cambio di distribuzione, non di applicazione: lo stesso file
+servito da un'origine reale invece che aperto da cartella.
+
+Nota su C: Excel non viene scartato perché inadeguato al calcolo, ma perché su più PM il
+file si moltiplica in varianti non allineate e il confronto fra commesse diventa
+impossibile.
+
+### 5.1 Stack tecnico
+
+- Pagina HTML singola, JavaScript senza framework e senza fase di build.
 - Motore di calcolo isolato in un modulo puro, con test unitari (test runner nativo di
   Node, nessuna dipendenza esterna).
 - Grafici in SVG generato a runtime, nessuna libreria di terze parti.
-- Persistenza: localStorage del browser per il lavoro in corso, export/import JSON per
-  archiviare e scambiare, export CSV/Excel per il controllo di gestione.
-- Distribuzione: file singolo apribile da cartella di rete, oppure pagina interna.
+- Archivio: file JSON in cartella di rete, con fallback Scarica/Apri.
+- Export: CSV per il controllo di gestione, stampa in PDF tramite il browser.
 
-Motivazione: nessuna dipendenza da aggiornare, nessun rischio di rottura del build, il file
-sopravvive agli anni. Il prezzo è una maggiore disciplina nella scrittura del codice, che
-si paga isolando il motore di calcolo e testandolo.
+Motivazione: nessuna dipendenza da aggiornare, nessun build da mantenere, il file
+sopravvive agli anni. Il prezzo è maggiore disciplina nella scrittura del codice, che si
+paga isolando il motore di calcolo e testandolo.
 
----
+## 6. Piano di lavoro
 
-## 5. Piano di lavoro
-
-| Fase | Contenuto | Deliverable | Effort | Blocco |
-|---|---|---|---|---|
-| 0 | Allineamento: definizione di margine, perimetro costi, tariffe orarie, fonte del baseline | documento di specifica confermato | 0,5 gg | richiede risposte dal committente |
-| 1 | Motore di calcolo e test | modulo calcolo + suite di test | 1 gg | dipende da fase 0 |
-| 2 | Interfaccia di inserimento, vista semplice e dettagliata | schermata funzionante | 1,5 gg | |
-| 3 | Gestione delle tre colonne Preventivo / KOM / Simulato, duplica colonna, congelamento | modello a tre istanze | 1 gg | |
-| 4 | Simulatore: scostamenti percentuali componibili, scenari Base/Best/Worst | pannello simulazione | 1 gg | |
-| 5 | Confronto e scomposizione: tabella a tre colonne con i due gap, waterfall, tornado, break-even, export | reportistica | 1,5 gg | |
-| 6 | Personalizzazione voci, salvataggio, condivisione | gestione righe e persistenza | 0,5-1 gg | |
-| 7 | Pilota su 2 commesse reali con 2 PM, taratura | versione tarata + note d'uso | 1 settimana di calendario | richiede disponibilità PM |
-
-Totale sviluppo: 6,5-7,5 giornate/uomo, più una settimana di calendario per il pilota.
-La stima non include eventuale integrazione con il gestionale.
-
-Ordine di priorità se il tempo si riduce: fasi 1, 2, 3 e la sola tabella di confronto della
-fase 5 sono il minimo utilizzabile; la fase 4 è ciò che distingue un simulatore da un
-foglio di calcolo; waterfall, tornado e fase 6 sono rifinitura.
-
----
-
-## 6. Decisioni
-
-### 6.1 Confermate (2026-09-18)
-
-| # | Decisione | Scelta | Conseguenza sul modello |
+| Fase | Contenuto | Deliverable | Effort |
 |---|---|---|---|
-| 1 | Definizione di margine | Entrambi a cascata | Il calcolo espone Margine di contribuzione (R - CD) e, sotto, Margine industriale (R - CD - SG - CTG). Due righe di risultato, una sola schermata |
-| 2 | Ricavo | Ripartito per linea di servizio | Ogni linea ha il proprio campo ricavo e il proprio MdC%. Il totale commessa e' la somma |
-| 3 | Perimetro costi v1 | Include "Altri costi diretti" | Tre categorie per linea: Materiale, Manodopera, Altri costi diretti. Chi non la usa la lascia a zero |
-| 4 | Persistenza dati | Solo browser piu' file | Nessun backend, nessun login. localStorage per il lavoro in corso, export/import JSON, export CSV/Excel. Architettura opzione A |
-| 5 | Confronto richiesto | Tre colonne: Preventivo, KOM, Simulato | Il modello dati diventa tre istanze della stessa struttura. Confronto in euro, in % di marginalita' e in punti percentuali, piu' scomposizione effetto ricavo / effetto costo. Effort v1: piu' 1 gg |
+| 1 | Motore di calcolo e test | modulo calcolo + suite di test | 1 gg |
+| 2 | Maschera unica: testata, tre colonne, righe editabili, vista semplice e dettagliata | schermata funzionante | 2 gg |
+| 3 | Simulazione per scostamenti percentuali componibili | pannello simulazione | 0,5 gg |
+| 4 | Confronto: tabella a tre colonne, due gap, euro / % / punti percentuali, break-even | riepilogo decisionale | 1 gg |
+| 5 | Archivio: salvataggio, elenco, riapertura, fallback | archivio su cartella | 1 gg |
+| 6 | Export CSV e stampa | reportistica | 0,5 gg |
+| 7 | Pilota su 2 commesse reali con 2 PM | versione tarata + una pagina di istruzioni | 1 settimana di calendario |
+| opz. | Waterfall del margine e tornado chart | grafici | 1 gg |
 
-### 6.2 Aperte, con assunzione adottata in attesa di risposta
+Totale: 6 giornate/uomo, 5 senza i grafici opzionali, più una settimana di calendario per
+il pilota.
 
-Nessuna di queste blocca lo sviluppo: sono tutte parametriche e modificabili in schermata.
-Le assunzioni sono dichiarate qui per essere smentite, non per essere date per buone.
+Rispetto alla versione precedente del piano il totale scende da 6,5-7,5 a 6 giornate. La
+riduzione viene dalle funzioni eliminate in nome della semplicità, elencate sotto.
 
-| # | Punto aperto | Assunzione adottata in v1 | Cosa cambia se l'assunzione e' sbagliata |
+### 6.1 Eliminato per rispettare il requisito di semplicità
+
+| Funzione tolta | Perché |
+|---|---|
+| Congelamento colonne con sblocco autorizzato | è governance, non simulazione |
+| Gestore di scenari Base/Best/Worst nell'applicazione | con l'archivio bastano tre simulazioni salvate |
+| Import CSV dal gestionale | è l'anticamera dell'integrazione e della storicizzazione |
+| Marcatore delle righe modificate rispetto alla colonna di origine | utile in un budget vivo, inutile in una fotografia |
+| Waterfall e tornado in versione 1 | ottimi in riunione, non necessari per simulare. Restano opzionali |
+
+## 7. Decisioni
+
+### 7.1 Confermate
+
+| # | Decisione | Scelta |
+|---|---|---|
+| 1 | Definizione di margine | Margine di contribuzione e margine industriale a cascata |
+| 2 | Ricavo | Ripartito per linea di servizio, con ricavo proprio per ciascuna delle tre colonne |
+| 3 | Perimetro costi v1 | Materiale, Manodopera, Altri costi diretti |
+| 4 | Persistenza | Nessun backend. Archivio come file JSON in cartella di rete |
+| 5 | Confronto | Tre colonne Preventivo / KOM / Simulato, in euro, in percentuale di marginalità e in punti percentuali |
+| 6 | Uso | Estemporaneo. Nessuna storicizzazione, nessun consuntivo, nessun ciclo di vita |
+
+### 7.2 Aperte
+
+| # | Punto aperto | Assunzione adottata | Impatto se sbagliata |
 |---|---|---|---|
-| 5 | Tipo di contratto prevalente | Contratto a corpo: il ricavo di linea resta fisso durante la simulazione | Se prevale il contratto a misura serve un interruttore per linea che leghi il ricavo alle quantita'. Impatto: mezza giornata, da prevedere in fase 3 |
-| 6 | Tariffe orarie per tipo di manodopera | Campi parametrici in schermata, precompilati con valori segnaposto visibilmente marcati come da sostituire. Nessun valore inventato e' trattato come reale | Nessun impatto strutturale. Impatto sull'attendibilita' dei risultati: totale. E' il rischio numero uno del progetto |
-| 7 | Percentuale spese generali e sua base | Parametro in schermata, applicato sui costi diretti, default vuoto e non precompilato | Se la base aziendale e' il ricavo e non i costi diretti, cambia una formula e l'etichetta. Impatto: trascurabile se deciso prima della fase 1 |
-| 8 | Origine del budget di commessa (preventivo commerciale, gestionale, foglio del PM) | Inserimento manuale del baseline, piu' import da CSV con mappatura colonne | Se esiste un export strutturato dal gestionale, l'import va tarato su quel tracciato. Impatto: da mezza a una giornata in fase 5 |
-| 9 | Numero di PM utilizzatori e necessita' di confronto fra commesse | Uso individuale, nessun consolidamento | Se serve confronto storico fra commesse si passa all'opzione architetturale B, valutata dopo il pilota |
-| 10 | Disponibilita' del preventivo in forma analitica per linea e categoria | Colonna Preventivo compilabile a livello aggregato se il dettaglio non esiste | Se il preventivo e' disponibile solo come margine complessivo, il gap Preventivo → KOM resta calcolabile ma non scomponibile per linea |
-| 11 | Chi congela il KOM e con quale autorita' | Congelamento lato PM, con sblocco esplicito e tracciato in locale | Se il congelamento deve essere validato dal controllo di gestione serve un flusso di approvazione, che implica l'opzione architetturale B |
+| 7 | Browser standard aziendale | Edge o Chrome desktop, quindi selettore di cartella disponibile | su Firefox o Safari resta il fallback Scarica/Apri, senza elenco automatico. Nessun impatto sul calcolo |
+| 8 | Percorso della cartella di rete per l'archivio | scelto dall'utente al primo uso | nessuno |
+| 9 | Tariffe orarie per tipo di manodopera | campi parametrici, precompilati con segnaposto visibilmente marcati da sostituire | nessun impatto strutturale, impatto totale sull'attendibilità. È il rischio numero uno |
+| 10 | Percentuale di spese generali e sua base | parametro in schermata, applicato sui costi diretti, default vuoto | cambia una formula e un'etichetta se la base aziendale è il ricavo |
+| 11 | Tipo di contratto prevalente | a corpo, ricavo di linea fisso durante la simulazione | se prevale il contratto a misura serve un interruttore per linea, mezza giornata |
+| 12 | Disponibilità del preventivo in forma analitica | colonna Preventivo compilabile anche in forma aggregata | il gap Preventivo verso KOM resta calcolabile ma non scomponibile per linea |
 
-## 7. Rischi
+Nessuno di questi punti blocca la fase 1.
+
+## 8. Rischi
 
 | Rischio | Impatto | Mitigazione |
 |---|---|---|
-| Tariffe orarie non aggiornate o non condivise | il tool produce margini falsi e perde credibilità al primo confronto con il consuntivo | tariffe centralizzate, data di validità visibile in schermata, responsabile nominato |
-| Il PM lo usa una volta e torna a Excel | investimento sprecato | pilota su commesse vere prima del rilascio, import del budget esistente, nessun doppio inserimento |
-| Deriva funzionale verso un gestionale di commessa | complessità, costi, sovrapposizione con l'ERP | perimetro dichiarato: simulatore di scenari, non sistema di consuntivazione |
-| Dati di commessa e marginalità in file circolanti | informazione commerciale sensibile fuori controllo | file locali e non pubblici, nessun invio a servizi esterni, decisione esplicita sulla collocazione |
-| Confusione margine/ricarico nell'uso quotidiano | decisioni di pricing sbagliate | etichette esplicite in interfaccia e conversione mostrata a fianco |
+| Tariffe orarie non aggiornate o non condivise | il tool produce margini falsi e perde credibilità al primo confronto con il consuntivo | tariffe visibili in schermata con data di validità, responsabile nominato |
+| Archivio perso per spostamento del file o pulizia del browser | perdita delle simulazioni salvate | archivio su cartella di rete, non nel browser. È la ragione della scelta in sezione 4 |
+| Deriva verso un gestionale di commessa | complessità, costi, sovrapposizione con l'ERP | perimetro dichiarato in sezione 9 e funzioni già eliminate in sezione 6.1 |
+| Dati di marginalità in file circolanti | informazione commerciale sensibile fuori controllo | cartella di rete con i permessi aziendali già in essere, nessun invio a servizi esterni |
+| Confusione fra punti percentuali e percentuale | letture sbagliate in riunione | etichette esplicite e le tre variazioni sempre mostrate insieme, sezione 2.7 |
+| Il PM lo usa una volta e torna a Excel | investimento sprecato | pilota su commesse vere, nessun doppio inserimento, nessun obbligo di aggiornamento |
 
----
+## 9. Fuori perimetro
 
-## 8. Fuori perimetro (versione 1)
-
-- Consuntivazione ore e avanzamento lavori. Di conseguenza non esiste una quarta colonna
-  "Consuntivo" o "EAC": il simulato è una stima del PM, non un dato di contabilità di
-  commessa. È l'estensione naturale del tool ed è l'unica che richiederebbe l'integrazione
-  con il gestionale.
-- Fatturazione, SAL, stati avanzamento.
-- Gestione fornitori e ordini.
+- Consuntivazione ore, avanzamento lavori, SAL. Non esiste una colonna Consuntivo o EAC: il
+  simulato è una stima del PM, non un dato di contabilità di commessa.
+- Storicizzazione e confronto nel tempo della stessa commessa.
+- Fatturazione, gestione fornitori, ordini.
 - Integrazione con ERP o gestionale.
 - Multi-valuta con cambio dinamico.
-- Autenticazione e profilazione utenti.
+- Autenticazione, profilazione utenti, workflow di approvazione.
 
----
-
-## 9. Fonti
+## 10. Fonti
 
 Contesto aziendale:
 - Righi Elettroservizi S.p.A. / Righi Solutions — https://it.linkedin.com/company/righi-elettroservizi-spa
@@ -396,6 +473,13 @@ Margine di commessa e controllo di gestione:
 Margine e ricarico:
 - Margine o markup, differenza e formule — https://help.progestnow.com/article/margine-o-markup-differenza-e-formule/
 - Margine: calcolo e tipologie — https://farenumeri.it/margine-calcolo-e-tipologie/
+
+Comportamento del browser (verificato in questo ambiente e confrontato con la documentazione):
+- File System API, supporto e selettori su disco — https://developer.mozilla.org/en-US/docs/Web/API/File_System_API
+- showDirectoryPicker, metodo e compatibilità — https://developer.mozilla.org/en-US/docs/Web/API/Window/showDirectoryPicker
+- File System Access API, Chrome for Developers — https://developer.chrome.com/docs/capabilities/web-apis/file-system-access
+- localStorage e origini opache — https://developer.mozilla.org/en-US/docs/Web/API/Window/localStorage
+- Firefox, localStorage non disponibile su documenti file:// — https://bugzilla.mozilla.org/show_bug.cgi?id=507361
 
 Analisi di sensitività:
 - Praxis Framework, Analisi della sensibilità — https://www.praxisframework.org/it/library/sensitivity-analysis
