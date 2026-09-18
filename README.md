@@ -38,7 +38,11 @@ non può restare invisibile.
 
 ### Le schede
 
-1. Dati di commessa: livello, dati della commessa, parametri e valori.
+1. Dati di commessa: livello, dati della commessa, parametri e valori. I due parametri che
+   non riguardano la commessa in sé sono "Costi di struttura sulla commessa %" (la quota di
+   costi aziendali non imputati a nessuna commessa, che il controllo di gestione ribalta in
+   proporzione ai costi diretti) e "Riserva per imprevisti %". Lasciandoli a zero
+   spariscono da tutte le tabelle e il margine è semplicemente ricavo meno costi diretti.
 2. Simulazione: cursori per gli scostamenti, con l'effetto mostrato in testa alla scheda.
 3. Confronto: tre colonne, due gap, cascata del margine, incidenza di ogni voce.
 4. Archivio: salvataggio e riapertura.

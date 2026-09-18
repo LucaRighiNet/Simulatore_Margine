@@ -354,6 +354,40 @@ tabella scorre di lato, verificato alle larghezze degli iPhone in circolazione: 
 Indicazione d'uso che ne deriva: il telefono è adatto al livello Base e alla rilettura del
 confronto; il budget esecutivo al livello Completo si compila da computer.
 
+### 3.4.5 Nomi dei parametri: "spese generali" non si capisce
+
+"Spese generali" è un termine da controllo di gestione che in maschera non dice a cosa si
+riferisce. In interfaccia è stato rinominato e spiegato; nel modello dati la chiave resta
+`sgPct`, per non rompere i file già salvati.
+
+| Vecchia etichetta | Nuova etichetta | Spiegazione mostrata accanto al campo |
+|---|---|---|
+| Spese generali % sui costi diretti | Costi di struttura sulla commessa % | Quota dei costi aziendali non imputati a nessuna commessa — direzione, amministrazione, acquisti, immobili, mezzi — attribuita a questa commessa in proporzione ai suoi costi diretti. La percentuale la dà il controllo di gestione |
+| Contingency % sui costi diretti | Riserva per imprevisti % | Accantonamento sui costi per rischi non ancora emersi: varianti, rilavorazioni, fermi. Non è un costo già sostenuto |
+
+Tre accorgimenti oltre al nome:
+
+1. Accanto a ogni percentuale compare l'importo che produce sulla colonna simulata, che è
+   il modo più diretto per capire cosa fa un parametro.
+2. Quando entrambe sono a zero spariscono da tutte le tabelle, insieme alle righe del
+   margine industriale: due righe identiche con due nomi diversi confondono e basta. Una
+   nota in fondo al confronto dice perché non ci sono.
+3. Al livello Base non esistono affatto, con un pulsante che le aggiunge.
+
+### 3.4.6 Allineamento delle tabelle di inserimento
+
+Nel livello Completo le colonne numeriche risultavano sfalsate: nella stessa colonna
+l'input del ricavo era largo 313 px, quello del materiale 255 px (per via del campo sconto)
+e quello della manodopera 303 px (per via del suffisso), con quattro bordi destri diversi.
+Anche due linee di servizio diverse non si allineavano fra loro, perché ogni tabella si
+dimensionava sul proprio contenuto.
+
+| Causa | Rimedio |
+|---|---|
+| Colonne dimensionate sul contenuto, tabella per tabella | larghezze dichiarate in percentuale e `table-layout: fixed`, uguali per tutte le linee |
+| Celle con contenuti diversi (sconto, suffisso, nulla) | struttura unica per ogni cella numerica: campo principale elastico più uno slot accessorio di larghezza fissa, presente anche quando è vuoto |
+| Righe di manodopera alte 78 px contro 40, con il campo centrato e quindi più in basso del nome | seconda riga della tariffa resa compatta (62 px) e celle ancorate in alto, così la prima riga di ogni cella parte dalla stessa quota |
+
 ## 4. Archivio delle simulazioni
 
 Requisito: nessuna storicizzazione, nessun consuntivo da aggiornare nel tempo, solo un

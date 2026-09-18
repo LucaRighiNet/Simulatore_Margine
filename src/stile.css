@@ -273,6 +273,56 @@ svg .griglia { stroke: var(--linea); }
 }
 
 
+/* --- allineamento delle tabelle di inserimento --- */
+table.tab-fissa { table-layout: fixed; }
+table.tab-fissa th, table.tab-fissa td { overflow: hidden; }
+
+/* Ogni cella numerica: campo principale elastico più uno slot accessorio di larghezza
+   fissa, presente anche vuoto. È lo slot vuoto a tenere in colonna righe con contenuti
+   diversi (con lo sconto, con il suffisso, senza nulla). */
+.coppia-valore { display: flex; align-items: center; gap: 4px; }
+.coppia-valore .principale { flex: 1 1 auto; min-width: 0; }
+.coppia-valore .accessorio {
+  flex: 0 0 54px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 3px;
+}
+.coppia-valore .accessorio input.sconto { width: 38px; padding-left: 3px; padding-right: 3px; }
+.coppia-valore .suff { font-size: 10px; color: var(--ink-3); width: 10px; text-align: left; }
+
+/* Seconda riga della manodopera: subordinata, così non spezza il ritmo verticale. */
+.riga-tariffa { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.riga-tariffa select {
+  font-size: 11px; padding: 2px 4px; height: 22px;
+  color: var(--ink-2); flex: 1 1 auto; min-width: 0;
+}
+.riga-tariffa button.commuta { flex: 0 0 auto; }
+table.tab-dati td input:not(.sconto) { height: 28px; }
+
+/* Allineamento in testa: una riga di manodopera è più alta perché porta la tariffa sotto
+   il nome. Con le celle centrate, il campo numerico scenderebbe sotto il nome; ancorandole
+   in alto, la prima riga di ogni cella parte dalla stessa quota. */
+table.tab-dati td { vertical-align: top; padding-top: 4px; }
+/* Solo le celle di solo testo scendono, per incolonnare la loro riga di testo con quella
+   dentro i campi. Le celle che contengono un campo restano dove sono. */
+table.tab-dati td.n[data-out], table.tab-dati tr.somma td:first-child { padding-top: 10px; }
+table.tab-dati tr.cat td { padding-top: 4px; }
+table.tab-dati td.azione-riga { padding-top: 8px; }
+
+/* --- parametri spiegati --- */
+.sotto-titolo {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-2); margin: 0 0 6px;
+}
+.blocco-struttura {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--linea);
+}
+.campo-spiegato { min-width: 0; }
+.campo-spiegato .nota { max-width: 46ch; }
+.valore-vivo {
+  margin-top: 4px; font-size: 11px; color: var(--ink-3);
+}
+.valore-vivo b { font-family: var(--mono); color: var(--ink-2); font-weight: 500; }
+
 /* --- scelta del livello di dettaglio --- */
 .pannello-livello .corpo { padding-top: 10px; padding-bottom: 10px; }
 .scelta-livello { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }

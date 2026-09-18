@@ -282,6 +282,56 @@ svg .griglia { stroke: var(--linea); }
 }
 
 
+/* --- allineamento delle tabelle di inserimento --- */
+table.tab-fissa { table-layout: fixed; }
+table.tab-fissa th, table.tab-fissa td { overflow: hidden; }
+
+/* Ogni cella numerica: campo principale elastico più uno slot accessorio di larghezza
+   fissa, presente anche vuoto. È lo slot vuoto a tenere in colonna righe con contenuti
+   diversi (con lo sconto, con il suffisso, senza nulla). */
+.coppia-valore { display: flex; align-items: center; gap: 4px; }
+.coppia-valore .principale { flex: 1 1 auto; min-width: 0; }
+.coppia-valore .accessorio {
+  flex: 0 0 54px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 3px;
+}
+.coppia-valore .accessorio input.sconto { width: 38px; padding-left: 3px; padding-right: 3px; }
+.coppia-valore .suff { font-size: 10px; color: var(--ink-3); width: 10px; text-align: left; }
+
+/* Seconda riga della manodopera: subordinata, così non spezza il ritmo verticale. */
+.riga-tariffa { display: flex; align-items: center; gap: 6px; margin-top: 3px; }
+.riga-tariffa select {
+  font-size: 11px; padding: 2px 4px; height: 22px;
+  color: var(--ink-2); flex: 1 1 auto; min-width: 0;
+}
+.riga-tariffa button.commuta { flex: 0 0 auto; }
+table.tab-dati td input:not(.sconto) { height: 28px; }
+
+/* Allineamento in testa: una riga di manodopera è più alta perché porta la tariffa sotto
+   il nome. Con le celle centrate, il campo numerico scenderebbe sotto il nome; ancorandole
+   in alto, la prima riga di ogni cella parte dalla stessa quota. */
+table.tab-dati td { vertical-align: top; padding-top: 4px; }
+/* Solo le celle di solo testo scendono, per incolonnare la loro riga di testo con quella
+   dentro i campi. Le celle che contengono un campo restano dove sono. */
+table.tab-dati td.n[data-out], table.tab-dati tr.somma td:first-child { padding-top: 10px; }
+table.tab-dati tr.cat td { padding-top: 4px; }
+table.tab-dati td.azione-riga { padding-top: 8px; }
+
+/* --- parametri spiegati --- */
+.sotto-titolo {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-2); margin: 0 0 6px;
+}
+.blocco-struttura {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--linea);
+}
+.campo-spiegato { min-width: 0; }
+.campo-spiegato .nota { max-width: 46ch; }
+.valore-vivo {
+  margin-top: 4px; font-size: 11px; color: var(--ink-3);
+}
+.valore-vivo b { font-family: var(--mono); color: var(--ink-2); font-weight: 500; }
+
 /* --- scelta del livello di dettaglio --- */
 .pannello-livello .corpo { padding-top: 10px; padding-bottom: 10px; }
 .scelta-livello { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
@@ -1243,6 +1293,13 @@ const categorieVisibili = (linea) => {
   return viste;
 };
 const etichettaLivello = (k) => (LIVELLI.find((x) => x[0] === k) || [])[1] || k;
+
+/**
+ * I costi di struttura e la riserva per imprevisti esistono solo se qualcuno li usa.
+ * Quando sono entrambi a zero il margine industriale coincide con quello di contribuzione,
+ * e mostrare due righe identiche con due nomi diversi confonde e basta: spariscono.
+ */
+const usaStruttura = () => Number(sim.parametri.sgPct || 0) !== 0 || Number(sim.parametri.ctgPct || 0) !== 0;
 let scheda = 'dati';
 let riferimentoIncidenza = 'cd';
 let elencoArchivio = [];
@@ -1443,27 +1500,49 @@ function tabellaTariffe() {
     h('p', { class: 'nota', testo: 'Costo orario aziendale pieno, non prezzo di vendita. Finché resta a zero, il margine delle righe in ore non ha significato.' }));
 }
 
+
+function campoConEuro(etichetta, percorso, valore, chiaveEuro, aiuto) {
+  return h('div', { class: 'campo-spiegato' },
+    campoNumero(etichetta, percorso, valore),
+    h('div', { class: 'valore-vivo' },
+      h('span', { testo: 'sulla colonna simulata: ' }),
+      h('b', { 'data-out': chiaveEuro, testo: '\u2014' })),
+    h('p', { class: 'nota', style: 'margin-top:4px', testo: aiuto }));
+}
+
 function pannelloParametri() {
-  const campi = [campoNumero('Margine industriale obiettivo %', 'parametri.targetPct', sim.parametri.targetPct)];
-  if (livello !== 'base') {
-    campi.unshift(
-      campoNumero('Spese generali % sui costi diretti', 'parametri.sgPct', sim.parametri.sgPct),
-      campoNumero('Contingency % sui costi diretti', 'parametri.ctgPct', sim.parametri.ctgPct));
-  }
-  if (livello === 'completo') {
-    campi.push(campoTesto('Tariffe valide dal', 'parametri.validitaTariffe', sim.parametri.validitaTariffe, { type: 'date' }));
-  }
+  const struttura = livello !== 'base';
+  const campi = [campoNumero('Margine obiettivo %', 'parametri.targetPct', sim.parametri.targetPct)];
 
   return h('section', { class: 'pannello' },
     h('h2', { testo: livello === 'completo' ? 'Parametri e tariffe orarie' : 'Parametri' }),
     h('div', { class: 'corpo' },
       h('div', { class: 'campi' }, ...campi),
-      livello === 'base'
-        ? h('p', { class: 'nota' },
-          'Spese generali e contingency restano a zero a questo livello, quindi il margine industriale coincide con il margine di contribuzione. ',
-          pulsanteEspandi('intermedio', 'Aggiungili'))
-        : null,
-      livello === 'completo' ? h('div', { style: 'margin-top:12px' }, tabellaTariffe()) : null,
+      h('p', { class: 'nota', style: 'margin-top:4px', testo: 'Soglia sotto la quale la commessa non deve scendere. Colora il semaforo in basso e determina la riserva mostrata nel Confronto.' }),
+
+      struttura
+        ? h('div', { class: 'blocco-struttura' },
+          h('h3', { class: 'sotto-titolo', testo: 'Costi che non stanno dentro la commessa' }),
+          h('p', { class: 'nota', style: 'margin-top:0' }, 'Due percentuali applicate ai costi diretti. Se non le usate, lasciatele a zero: spariscono da tutte le tabelle e il margine industriale torna a coincidere con quello di contribuzione.'),
+          h('div', { class: 'campi' },
+            campoConEuro(
+              'Costi di struttura sulla commessa %',
+              'parametri.sgPct', sim.parametri.sgPct, 'tot:simulato:speseGenerali:euro',
+              'Quota dei costi aziendali che non sono imputati a nessuna commessa \u2014 direzione, amministrazione, acquisti, immobili, mezzi \u2014 attribuita a questa commessa in proporzione ai suoi costi diretti. La percentuale la d\u00e0 il controllo di gestione, non si inventa.'),
+            campoConEuro(
+              'Riserva per imprevisti %',
+              'parametri.ctgPct', sim.parametri.ctgPct, 'tot:simulato:contingency:euro',
+              'Margine di sicurezza tenuto sui costi per rischi non ancora emersi: varianti, rilavorazioni, fermi. Non \u00e8 un costo gi\u00e0 sostenuto, \u00e8 un accantonamento.')))
+        : h('p', { class: 'nota' },
+          'A questo livello non ci sono costi di struttura n\u00e9 riserva per imprevisti: il margine \u00e8 semplicemente ricavo meno costi diretti. ',
+          pulsanteEspandi('intermedio', 'Aggiungili')),
+
+      livello === 'completo' ? h('div', { style: 'margin-top:14px' },
+        h('h3', { class: 'sotto-titolo', testo: 'Tariffe orarie' }),
+        tabellaTariffe(),
+        h('div', { class: 'campi', style: 'margin-top:8px' },
+          campoTesto('Tariffe valide dal', 'parametri.validitaTariffe', sim.parametri.validitaTariffe, { type: 'date' }))) : null,
+
       livello === 'intermedio'
         ? h('p', { class: 'nota' }, 'Le tariffe orarie servono solo se inserisci la manodopera in ore. ',
           pulsanteEspandi('completo', 'Vai al dettaglio per voce'))
@@ -1471,23 +1550,62 @@ function pannelloParametri() {
 }
 
 
+
+/**
+ * Larghezze di colonna deterministiche. Senza, ogni tabella si dimensiona sul proprio
+ * contenuto e le colonne di due linee di servizio non si allineano fra loro; dentro la
+ * stessa colonna, una riga con lo sconto e una senza finiscono con l'input di larghezza
+ * diversa e il bordo destro sfalsato.
+ */
+function colonneTabella(nValori, conAzione) {
+  const azione = conAzione ? 5 : 0;
+  const voce = 30;
+  const larghezza = ((100 - voce - azione) / (nValori + 1)).toFixed(3);
+  return h('colgroup', {},
+    h('col', { style: `width:${voce}%` }),
+    ...Array.from({ length: nValori + 1 }, () => h('col', { style: `width:${larghezza}%` })),
+    conAzione ? h('col', { style: `width:${azione}%` }) : null);
+}
+
+/**
+ * Ogni cella numerica ha la stessa struttura: un campo principale che occupa lo spazio
+ * disponibile e uno slot accessorio di larghezza fissa, presente anche quando è vuoto.
+ * È lo slot vuoto a tenere allineate fra loro righe che hanno contenuti diversi.
+ */
 function cellaValore(voce, colonna, percorsoBase) {
+  const accessorio = (...figli) => h('span', { class: 'accessorio' }, ...figli);
+  let dentro;
+
   if (voce.cat === 'manodopera') {
     const ore = modoManodopera(voce) === 'ore';
-    return h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[colonna] },
-      h('div', { class: 'coppia' },
-        inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { placeholder: '0' }),
-        h('span', { class: 'suff', testo: ore ? 'h' : '\u20ac' })));
+    dentro = [
+      inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { class: 'num principale', placeholder: '0' }),
+      accessorio(h('span', { class: 'suff', testo: ore ? 'h' : '\u20ac' })),
+    ];
+  } else if (voce.cat === 'materiale') {
+    dentro = [
+      inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { class: 'num principale', placeholder: 'listino', title: 'Importo di listino' }),
+      accessorio(
+        inputNumero(`${percorsoBase}.${colonna}.sconto`, voce[colonna].sconto, { class: 'num sconto', placeholder: '0', title: 'Sconto percentuale sul listino' }),
+        h('span', { class: 'suff', testo: '%' })),
+    ];
+  } else {
+    dentro = [
+      inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { class: 'num principale', placeholder: '0' }),
+      accessorio(h('span', { class: 'suff', testo: '\u20ac' })),
+    ];
   }
-  if (voce.cat === 'materiale') {
-    return h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[colonna] },
-      h('div', { class: 'coppia' },
-        inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { placeholder: 'listino', title: 'Importo di listino' }),
-        inputNumero(`${percorsoBase}.${colonna}.sconto`, voce[colonna].sconto, { placeholder: '0', style: 'width:52px', title: 'Sconto percentuale sul listino' }),
-        h('span', { class: 'suff', testo: '%' })));
-  }
+
   return h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[colonna] },
-    inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { placeholder: '0' }));
+    h('div', { class: 'coppia coppia-valore' }, ...dentro));
+}
+
+/** Cella di sola lettura con lo stesso impianto, per restare allineata alle celle editabili. */
+function cellaRicavo(percorso, valore, colonna) {
+  return h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[colonna] },
+    h('div', { class: 'coppia coppia-valore' },
+      inputNumero(percorso, valore, { class: 'num principale', placeholder: '0' }),
+      h('span', { class: 'accessorio' }, h('span', { class: 'suff', testo: '\u20ac' }))));
 }
 
 
@@ -1501,7 +1619,7 @@ function rigaVoce(linea, iL, voce, iV) {
 
   if (voce.cat === 'manodopera') {
     const ore = modoManodopera(voce) === 'ore';
-    celleNome.push(h('div', { class: 'coppia', style: 'margin-top:4px;gap:6px' },
+    celleNome.push(h('div', { class: 'riga-tariffa' },
       h('button', {
         class: 'muto commuta', testo: ore ? 'ore x tariffa' : 'importo in euro',
         title: 'Passa da ore per tariffa a importo diretto',
@@ -1538,8 +1656,7 @@ function tabellaLineaDettagliata(linea, iL) {
   const corpo = h('tbody', {});
   corpo.appendChild(h('tr', { class: 'somma' },
     h('td', { 'data-et': 'Voce', testo: 'Ricavo di linea' }),
-    ...cols.map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c] },
-      inputNumero(`linee.${iL}.ricavo.${c}`, linea.ricavo[c], { placeholder: '0' }))),
+    ...cols.map((c) => cellaRicavo(`linee.${iL}.ricavo.${c}`, linea.ricavo[c], c)),
     h('td', { class: 'n derivato', 'data-et': 'Simulato', 'data-out': 'ricavo:' + linea.id, testo: '\u2014' }),
     h('td', { class: 'azione-riga' })));
 
@@ -1567,7 +1684,8 @@ function tabellaLineaDettagliata(linea, iL) {
     ...[...cols, 'simulato'].map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `mdclinea:${linea.id}:${c}`, testo: '\u2014' })),
     h('td', { class: 'azione-riga' })));
 
-  return h('div', { class: 'tabellone' }, h('table', { class: 'tab-dati' },
+  return h('div', { class: 'tabellone' }, h('table', { class: 'tab-dati tab-fissa' },
+    colonneTabella(cols.length, true),
     h('thead', {}, h('tr', {},
       h('th', { testo: 'Voce' }),
       ...cols.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })),
@@ -1582,8 +1700,7 @@ function tabellaLineaSemplice(linea, iL) {
   const corpo = h('tbody', {});
   corpo.appendChild(h('tr', { class: 'somma' },
     h('td', { 'data-et': 'Voce', testo: 'Ricavo di linea' }),
-    ...cols.map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c] },
-      inputNumero(`linee.${iL}.ricavo.${c}`, linea.ricavo[c], { placeholder: '0' }))),
+    ...cols.map((c) => cellaRicavo(`linee.${iL}.ricavo.${c}`, linea.ricavo[c], c)),
     h('td', { class: 'n derivato', 'data-et': 'Simulato', 'data-out': 'ricavo:' + linea.id, testo: '\u2014' })));
 
   for (const cat of categorieVisibili(linea)) {
@@ -1591,9 +1708,12 @@ function tabellaLineaSemplice(linea, iL) {
     const unica = voci.length === 1 ? voci[0] : null;
     const iV = unica ? linea.voci.indexOf(unica) : -1;
     const suffisso = unica && unica.cat === 'manodopera' && modoManodopera(unica) === 'ore' ? ' (ore)' : '';
+    const suff = unica && unica.cat === 'manodopera' && modoManodopera(unica) === 'ore' ? 'h' : '\u20ac';
     const celle = cols.map((c) => (unica
       ? h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c] },
-        inputNumero(`linee.${iL}.voci.${iV}.${c}.q`, unica[c].q, { placeholder: '0' }))
+        h('div', { class: 'coppia coppia-valore' },
+          inputNumero(`linee.${iL}.voci.${iV}.${c}.q`, unica[c].q, { class: 'num principale', placeholder: '0' }),
+          h('span', { class: 'accessorio' }, h('span', { class: 'suff', testo: suff }))))
       : h('td', { class: 'n derivato', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `catcol:${linea.id}:${cat}:${c}`, testo: '\u2014' })));
 
     corpo.appendChild(h('tr', {},
@@ -1622,7 +1742,8 @@ function tabellaLineaSemplice(linea, iL) {
     h('td', { 'data-et': 'Voce', testo: 'Margine di contribuzione' }),
     ...[...cols, 'simulato'].map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `mdclinea:${linea.id}:${c}`, testo: '\u2014' }))));
 
-  return h('div', { class: 'tabellone' }, h('table', { class: 'tab-dati' },
+  return h('div', { class: 'tabellone' }, h('table', { class: 'tab-dati tab-fissa' },
+    colonneTabella(cols.length, false),
     h('thead', {}, h('tr', {},
       h('th', { testo: 'Categoria' }),
       ...cols.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })),
@@ -1758,8 +1879,10 @@ function riepilogoSimulazione() {
     ['cd', 'euro', 'Costi diretti'],
     ['mdc', 'euro', 'Margine di contribuzione'],
     ['mdcPct', 'perc', 'Marginalità'],
-    ['mi', 'euro', 'Margine industriale'],
-    ['miPct', 'perc', 'Margine industriale %'],
+    ...(usaStruttura() ? [
+      ['mi', 'euro', 'Margine industriale'],
+      ['miPct', 'perc', 'Margine industriale %'],
+    ] : []),
   ];
   return h('section', { class: 'pannello' },
     h('h2', { testo: 'Effetto della simulazione' }),
@@ -1824,12 +1947,14 @@ function rigaConfronto(etichetta, chiave, formato = 'euro', forte = false) {
 
 
 function tabellaGap(titolo, chiave, sottotitolo) {
+  const conMi = usaStruttura();
   const riga = (et, k) => h('tr', k === 'effettoRicavo' || k === 'effettoCosto' ? { class: 'somma' } : {},
     h('td', { 'data-et': 'Grandezza', testo: et }),
     h('td', { class: 'n', 'data-et': 'Margine di contribuzione', 'data-out': `gap:${chiave}:${k}:${k.includes('Pp') ? 'punti' : k.includes('Rel') ? 'rel' : 'euro'}`, testo: '\u2014' }),
-    (k === 'effettoRicavo' || k === 'effettoCosto')
-      ? h('td', { class: 'n', 'data-et': 'Margine industriale' })
-      : h('td', { class: 'n', 'data-et': 'Margine industriale', 'data-out': `gap:${chiave}:${k.replace('Mdc', 'Mi')}:${k.includes('Pp') ? 'punti' : k.includes('Rel') ? 'rel' : 'euro'}`, testo: '\u2014' }));
+    !conMi ? null
+      : (k === 'effettoRicavo' || k === 'effettoCosto')
+        ? h('td', { class: 'n', 'data-et': 'Margine industriale' })
+        : h('td', { class: 'n', 'data-et': 'Margine industriale', 'data-out': `gap:${chiave}:${k.replace('Mdc', 'Mi')}:${k.includes('Pp') ? 'punti' : k.includes('Rel') ? 'rel' : 'euro'}`, testo: '\u2014' }));
 
   return h('section', { class: 'pannello' },
     h('h2', { testo: titolo }),
@@ -1839,7 +1964,7 @@ function tabellaGap(titolo, chiave, sottotitolo) {
         h('thead', {}, h('tr', {},
           h('th', { testo: 'Grandezza' }),
           h('th', { class: 'n', testo: 'Margine di contribuzione' }),
-          h('th', { class: 'n', testo: 'Margine industriale' }))),
+          conMi ? h('th', { class: 'n', testo: 'Margine industriale' }) : null)),
         h('tbody', {},
           riga('Variazione assoluta', 'dMdc'),
           riga('Variazione della marginalità', 'dMdcPp'),
@@ -1892,10 +2017,15 @@ function schedaConfronto() {
           rigaConfronto('Costi diretti', 'cd'),
           rigaConfronto('Margine di contribuzione', 'mdc', 'euro', true),
           rigaConfronto('Marginalità', 'mdcPct', 'perc', true),
-          rigaConfronto('Spese generali', 'speseGenerali'),
-          rigaConfronto('Contingency', 'contingency'),
-          rigaConfronto('Margine industriale', 'mi', 'euro', true),
-          rigaConfronto('Margine industriale %', 'miPct', 'perc', true))))),
+          ...(usaStruttura() ? [
+            rigaConfronto('Costi di struttura', 'speseGenerali'),
+            rigaConfronto('Riserva per imprevisti', 'contingency'),
+            rigaConfronto('Margine industriale', 'mi', 'euro', true),
+            rigaConfronto('Margine industriale %', 'miPct', 'perc', true),
+          ] : []))),
+      usaStruttura()
+        ? h('p', { class: 'nota', style: 'padding:0 14px 12px' }, 'Margine di contribuzione: ricavo meno costi diretti. Margine industriale: dopo aver tolto anche i costi di struttura e la riserva per imprevisti.')
+        : h('p', { class: 'nota', style: 'padding:0 14px 12px' }, 'Costi di struttura e riserva per imprevisti sono a zero, quindi non compaiono: qui il margine è ricavo meno costi diretti.'))),
     h('section', { class: 'pannello' },
       h('h2', { testo: 'Dal preventivo al simulato' }),
       h('div', { class: 'corpo' },
@@ -1959,8 +2089,10 @@ function schedaGuida() {
       h('h2', { testo: 'Leggere il confronto senza sbagliare' }),
       h('div', { class: 'corpo' },
         vociGuida([
-          ['Margine di contribuzione', 'Ricavo meno costi diretti della commessa. È la leva che il PM controlla.'],
-          ['Margine industriale', 'Dopo spese generali e contingency. È quello che si confronta con il budget aziendale.'],
+          ['Margine di contribuzione', 'Ricavo meno costi diretti della commessa: materiale, manodopera, trasferte, subappalti. È la leva che il PM controlla.'],
+          ['Costi di struttura', 'Quota dei costi aziendali che non sono imputati a nessuna commessa — direzione, amministrazione, acquisti, immobili, mezzi — attribuita a questa commessa in proporzione ai suoi costi diretti. La percentuale la dà il controllo di gestione. A zero sparisce da tutte le tabelle.'],
+          ['Riserva per imprevisti', 'Accantonamento sui costi per rischi non ancora emersi: varianti, rilavorazioni, fermi. Non è un costo già sostenuto. A zero sparisce.'],
+          ['Margine industriale', 'Margine di contribuzione meno costi di struttura e riserva. È quello che si confronta con il budget aziendale. Se entrambi sono a zero coincide con il margine di contribuzione, e infatti non viene mostrato.'],
           ['Variazione assoluta', 'Quanti euro di margine si sono persi o guadagnati.'],
           ['Punti percentuali (p.p.)', 'Differenza fra due percentuali. Da 18% a 14% sono meno 4 punti percentuali.'],
           ['Variazione relativa', 'Quanta parte del margine si è bruciata. Da 18% a 14% è meno 25,3%: stesso fatto, numero diverso. Confonderla con i punti percentuali è l’errore più comune.'],
@@ -2299,11 +2431,11 @@ function aggiornaDerivati() {
     scrivi(`tot:${c}:mdcPct:perc`, formatta(col.mdcPct, 'perc'), null,
       `${euro(col.mdc)} diviso ricavo ${euro(col.ricavo)} = ${perc(col.mdcPct)}.`);
     scrivi(`tot:${c}:speseGenerali:euro`, formatta(col.speseGenerali, 'euro'), null,
-      `Costi diretti ${euro(col.cd)} \u00d7 ${pctTesto(sg)} = ${euro(col.speseGenerali)}.`);
+      `Quota dei costi aziendali non imputati a commessa, attribuita a questa in proporzione ai suoi costi diretti: ${euro(col.cd)} \u00d7 ${pctTesto(sg)} = ${euro(col.speseGenerali)}.`);
     scrivi(`tot:${c}:contingency:euro`, formatta(col.contingency, 'euro'), null,
-      `Costi diretti ${euro(col.cd)} \u00d7 ${pctTesto(ctg)} = ${euro(col.contingency)}.`);
+      `Accantonamento per rischi non ancora emersi: costi diretti ${euro(col.cd)} \u00d7 ${pctTesto(ctg)} = ${euro(col.contingency)}.`);
     scrivi(`tot:${c}:mi:euro`, formatta(col.mi, 'euro'), null,
-      `${euro(col.ricavo)} meno costi ${euro(col.cd)} meno spese generali ${euro(col.speseGenerali)} meno contingency ${euro(col.contingency)} = ${euro(col.mi)}.`);
+      `${euro(col.ricavo)} meno costi diretti ${euro(col.cd)} meno costi di struttura ${euro(col.speseGenerali)} meno riserva per imprevisti ${euro(col.contingency)} = ${euro(col.mi)}.`);
     scrivi(`tot:${c}:miPct:perc`, formatta(col.miPct, 'perc'), null,
       `${euro(col.mi)} diviso ricavo ${euro(col.ricavo)} = ${perc(col.miPct)}.`);
     scrivi(`tot:${c}:cd:euro`, formatta(col.cd, 'euro'), null,
@@ -2447,11 +2579,12 @@ function aggiornaDerivati() {
   const pil = $('#semaforo');
   if (pil) {
     pil.className = 'pillola ' + classeMargine(s.miPct, target);
-    pil.textContent = 'MI simulato ' + perc(s.miPct) + (target > 0 ? ' \u00b7 obiettivo ' + perc(target) : '');
+    const nome = usaStruttura() ? 'Margine industriale' : 'Margine';
+    pil.textContent = nome + ' simulato ' + perc(s.miPct) + (target > 0 ? ' \u00b7 obiettivo ' + perc(target) : '');
   }
 
   scrivi('tot:simulato:cdMax:euro', euro(s.cdMax), null,
-    `Ricavo ${euro(s.ricavo)} \u00d7 (100% meno obiettivo ${perc(target)}) diviso (1 + spese generali ${pctTesto(sg)} + contingency ${pctTesto(ctg)}) = ${euro(s.cdMax)}.`);
+    `Ricavo ${euro(s.ricavo)} \u00d7 (100% meno obiettivo ${perc(target)}) diviso (1 + costi di struttura ${pctTesto(sg)} + riserva ${pctTesto(ctg)}) = ${euro(s.cdMax)}.`);
   scrivi('tot:simulato:riserva:euro', euro(s.riserva), null,
     `Costo massimo ammissibile ${euro(s.cdMax)} meno costi simulati ${euro(s.cd)} = ${euro(s.riserva)}.`);
   scrivi('tot:simulato:riservaPct:perc', perc(s.riservaPct), null,
