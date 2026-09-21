@@ -359,7 +359,9 @@ function cellaSimulataVoce(linea, voce) {
   return h('td', { class: 'n', 'data-et': 'Simulato' },
     h('div', { class: 'coppia coppia-valore' },
       campo,
-      h('span', { class: 'accessorio' }, h('span', { class: 'suff', testo: '\u20ac' }))));
+      h('span', { class: 'accessorio' },
+        h('span', { class: 'direzione' }),
+        h('span', { class: 'suff', testo: '\u20ac' }))));
 }
 
 /** Stessa logica per il ricavo del servizio. */
@@ -386,7 +388,9 @@ function cellaSimulataRicavo(linea) {
   return h('td', { class: 'n', 'data-et': 'Simulato' },
     h('div', { class: 'coppia coppia-valore' },
       campo,
-      h('span', { class: 'accessorio' }, h('span', { class: 'suff', testo: '\u20ac' }))));
+      h('span', { class: 'accessorio' },
+        h('span', { class: 'direzione' }),
+        h('span', { class: 'suff', testo: '\u20ac' }))));
 }
 
 function cellaValore(voce, colonna, percorsoBase) {
@@ -630,6 +634,9 @@ function guidaColonne() {
       h('h3', { class: 'sotto-titolo', testo: 'Dove si scrivono i valori' }),
       h('dl', { class: 'guida-elenco' },
         ...voci.flatMap(([et, testo]) => [h('dt', { testo: et }), h('dd', { testo })])),
+      h('p', { class: 'nota legenda-colori' },
+        h('span', { class: 'v-buono', testo: '\u25bc verde' }), ' il margine ci guadagna, ',
+        h('span', { class: 'v-critico', testo: '\u25b2 rosso' }), ' ci perde. Su un costo guadagna quando scende, su ricavo e margine quando salgono.'),
       h('p', { class: 'nota' }, 'Per variare più voci insieme, o per partire dal margine che vuoi ottenere, usa la scheda ',
         h('button', {
           class: 'muto commuta', testo: 'Simulazione',
@@ -1014,6 +1021,7 @@ function schedaGuida() {
           ['Punti percentuali (p.p.)', 'Differenza fra due percentuali. Da 18% a 14% sono meno 4 punti percentuali.'],
           ['Variazione relativa', 'Quanta parte del margine si è bruciata. Da 18% a 14% è meno 25,3%: stesso fatto, numero diverso. Confonderla con i punti percentuali è l’errore più comune.'],
           ['Effetto ricavo ed effetto costo', 'Da dove nasce lo scostamento: una concessione di prezzo o un costo che è cresciuto. Sommati danno la variazione totale.'],
+          ['Verde e rosso', 'Una regola sola in tutto lo strumento: verde quando il margine ci guadagna, rosso quando ci perde. Su un costo vuol dire scendere, su ricavo e margine salire. Il colore non è mai l\u2019unico segnale: c\u2019è sempre il segno davanti al numero, e sui valori assoluti anche una freccia.'],
         ]),
         h('p', {}, 'Nel pannello Incidenza puoi scegliere il riferimento, e le due letture non sono intercambiabili: sui costi diretti descrive la composizione del costo e ',
           h('b', { testo: 'non si muove' }),
@@ -1226,12 +1234,48 @@ function disegnaTornado() {
 // Spiegazione del calcolo dietro ogni cella derivata, indicizzata per chiave di uscita.
 const spiegazioni = new Map();
 
+/**
+ * Regola unica del colore: verde quando il margine ne guadagna, rosso quando ci perde.
+ * Su un costo questo vuol dire scendere, su ricavo e margine salire. Senza una regola
+ * sola, due rossi nella stessa schermata finirebbero per significare cose opposte.
+ *
+ * Il colore non è mai l'unico segnale: accanto c'è sempre il segno, e dove il numero è
+ * assoluto anche una freccia. Circa un uomo su dodici non distingue rosso e verde.
+ */
+function versoScostamento(valore, partenza, piuEMeglio) {
+  if (!(Math.abs(partenza) > 1e-9)) return { nullo: true };
+  const scarto = valore - partenza;
+  if (Math.abs(scarto) < 0.005) return { nullo: true, scarto: 0 };
+  const bene = piuEMeglio ? scarto > 0 : scarto < 0;
+  return { nullo: false, scarto, bene, classe: bene ? 'v-buono' : 'v-critico' };
+}
+
+/** Freccia accanto a un valore assoluto, perché la direzione si veda anche senza colore. */
+function segnalaDirezione(chiave, verso) {
+  for (const n of $$(`[data-out="${chiave}"]`)) {
+    const cella = n.closest ? n.closest('td') : null;
+    const freccia = cella && cella.querySelector('.direzione');
+    if (!freccia) continue;
+    if (verso.nullo) {
+      freccia.textContent = '';
+      freccia.className = 'direzione';
+      freccia.removeAttribute('title');
+      continue;
+    }
+    freccia.textContent = verso.scarto > 0 ? '\u25b2' : '\u25bc';
+    freccia.className = 'direzione ' + verso.classe;
+    freccia.setAttribute('title', `${verso.scarto > 0 ? 'più' : 'meno'} ${euro(Math.abs(verso.scarto))} rispetto al valore di partenza`);
+  }
+}
+
 function scrivi(sel, testo, classe, spiegazione, grezzo) {
   if (spiegazione !== undefined && spiegazione !== null) spiegazioni.set(sel, spiegazione);
   for (const n of $$(`[data-out="${sel}"]`)) {
     if (n.tagName === 'INPUT') {
       // Non si riscrive il campo mentre ci si sta digitando dentro.
       if (document.activeElement !== n && grezzo !== undefined) n.value = grezzo ? numero(grezzo) : '';
+      n.classList.remove('v-buono', 'v-critico');
+      if (classe) n.classList.add(classe);
       const s2 = spiegazioni.get(sel);
       if (s2) n.setAttribute('title', s2);
       continue;
@@ -1389,6 +1433,9 @@ function aggiornaDerivati() {
       `Ricavo ${baseEt} ${euro(linea.ricavo[r.baseSimulazione])}`
       + (dRic.length ? `, con gli scostamenti ${dRic.join(' e ')}` : ', nessuno scostamento sui ricavi')
       + ` = ${euro(l.ricavo)}.`, l.ricavo);
+    const versoRicavo = versoScostamento(l.ricavo, num(linea.ricavo[r.baseSimulazione]), true);
+    scrivi('ricavo:' + linea.id, euro(l.ricavo), versoRicavo.classe || null, undefined, l.ricavo);
+    segnalaDirezione('ricavo:' + linea.id, versoRicavo);
 
     for (const cat of CATEGORIE) {
       const n = linea.voci.filter((v) => v.cat === cat).length;
@@ -1404,7 +1451,9 @@ function aggiornaDerivati() {
       parti.push(fattori.length
         ? `Scostamenti applicati: ${fattori.join(', ')}. Risultato simulato ${euro(costo)}.`
         : 'Nessuno scostamento applicato a questa voce.');
-      scrivi('voce:' + voce.id, euro(costo), null, parti.join(' '), costo);
+      const verso = versoScostamento(costo, baseCosto, false);
+      scrivi('voce:' + voce.id, euro(costo), verso.classe || null, parti.join(' '), costo);
+      segnalaDirezione('voce:' + voce.id, verso);
     }
   }
 
@@ -1413,7 +1462,8 @@ function aggiornaDerivati() {
     for (const cat of CATEGORIE) {
       const base = l.perCategoria[cat];
       const simCat = s.linee.find((x) => x.id === l.id)?.perCategoria[cat] ?? 0;
-      scrivi(`catsim:${l.id}:${cat}`, base ? euroSegnato(simCat - base) : '\u2014');
+      const v = versoScostamento(simCat, base, false);
+      scrivi(`catsim:${l.id}:${cat}`, base ? euroSegnato(simCat - base) : '\u2014', v.classe || null);
     }
   }
 
@@ -1473,11 +1523,18 @@ function aggiornaDerivati() {
     }
   }
 
-  scrivi('barra:ricavo', euro(s.ricavo));
-  scrivi('barra:costi', euro(s.cd));
-  scrivi('barra:mdc', euro(s.mdc), null, `Ricavo ${euro(s.ricavo)} meno costi diretti ${euro(s.cd)} = ${euro(s.mdc)}.`);
-  for (const c of COLONNE) scrivi(`barra:mdcpct:${c}`, perc(r.colonne[c].mdcPct));
-  scrivi('barra:mi', euro(s.mi));
+  const rif = r.colonne[r.baseSimulazione];
+  const etRif = ETICHETTA_COLONNA[r.baseSimulazione];
+  const cls = (valore, partenza, piuEMeglio) => versoScostamento(valore, partenza, piuEMeglio).classe || null;
+  scrivi('barra:ricavo', euro(s.ricavo), cls(s.ricavo, rif.ricavo, true));
+  scrivi('barra:costi', euro(s.cd), cls(s.cd, rif.cd, false));
+  scrivi('barra:mdc', euro(s.mdc), cls(s.mdc, rif.mdc, true),
+    `Ricavo ${euro(s.ricavo)} meno costi diretti ${euro(s.cd)} = ${euro(s.mdc)}. Rispetto a ${etRif}: ${euroSegnato(s.mdc - rif.mdc)}.`);
+  for (const c of COLONNE) {
+    scrivi(`barra:mdcpct:${c}`, perc(r.colonne[c].mdcPct),
+      c === 'simulato' ? cls(s.mdcPct, rif.mdcPct, true) : null);
+  }
+  scrivi('barra:mi', euro(s.mi), cls(s.mi, rif.mi, true));
 
   const colBase = r.colonne[r.baseSimulazione];
   scrivi('cmp:intestazione', ETICHETTA_COLONNA[r.baseSimulazione]);
