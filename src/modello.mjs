@@ -115,7 +115,7 @@ export function normalizza(raw) {
   };
   sim.linee = sim.linee.map((l) => ({
     id: l.id || id('l'),
-    nome: l.nome || 'Linea',
+    nome: l.nome || 'Servizio',
     ricavo: { preventivo: 0, kom: 0, ...(l.ricavo || {}) },
     voci: (l.voci || []).map((v) => {
       const voce = {

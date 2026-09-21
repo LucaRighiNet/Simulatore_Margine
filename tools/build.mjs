@@ -7,6 +7,7 @@
 // concatena i moduli nell'ordine delle dipendenze dentro una funzione anonima.
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -15,6 +16,18 @@ const radice = join(qui, '..');
 const src = (f) => readFileSync(join(radice, 'src', f), 'utf8');
 
 const ORDINE = ['calcolo.mjs', 'modello.mjs', 'archivio.mjs', 'app.mjs'];
+
+// Controllo di sintassi prima di assemblare. I test coprono il motore, non l'interfaccia:
+// senza questo, una parentesi mancante in app.mjs passa il build, passa i test, e si
+// scopre solo aprendo la pagina e trovandola bianca.
+for (const f of ORDINE) {
+  try {
+    execFileSync(process.execPath, ['--check', join(radice, 'src', f)], { stdio: 'pipe' });
+  } catch (e) {
+    const dettaglio = (e.stderr || Buffer.from('')).toString().trim().split('\n').slice(0, 4).join('\n');
+    throw new Error(`errore di sintassi in src/${f}:\n${dettaglio}`);
+  }
+}
 
 function spoglia(codice, nome) {
   const senzaImport = codice.replace(/^import\s[\s\S]*?from\s+'[^']+';\s*$/gm, '');

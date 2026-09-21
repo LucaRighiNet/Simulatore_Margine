@@ -192,6 +192,8 @@ input, select {
 }
 input:focus, select:focus { outline: 2px solid var(--accento); outline-offset: -1px; border-color: var(--accento); }
 input[type="number"], input.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+/* Anche fuori dalle tabelle un campo numerico non si allunga oltre il necessario. */
+label.campo input.num { max-width: 160px; }
 input:read-only { background: var(--surface-2); color: var(--ink-2); }
 
 .tabellone { overflow-x: auto; }
@@ -374,6 +376,21 @@ button.commuta {
 }
 button.commuta:hover { color: var(--accento); border-color: var(--accento); }
 td.azione-riga, th.azione-riga { width: 34px; }
+
+/* --- colonna simulata, scrivibile --- */
+input.num.simulato {
+  color: var(--accento);
+  font-weight: 600;
+  border-color: color-mix(in srgb, var(--accento) 45%, var(--linea-forte));
+  background: color-mix(in srgb, var(--accento-tenue) 45%, var(--surface));
+}
+input.num.simulato:focus { background: var(--surface); }
+input.num.simulato::placeholder { color: var(--ink-3); font-weight: 400; }
+table.tab-dati th:last-of-type, table.tab-dati th.n:nth-last-child(2) { color: var(--accento); }
+
+.pannello-guida-colonne { border-left: 3px solid var(--accento); }
+.pannello-guida-colonne .guida-elenco { margin-bottom: 6px; }
+.pannello-guida-colonne dt { color: var(--accento); }
 
 /* --- partire dal margine --- */
 .riga-margine {
@@ -753,25 +770,37 @@ function calcola(sim) {
  * Sensitività: impatto sul margine industriale simulato di una variazione del driver,
  * tenendo fermi gli altri. Ordinato per impatto decrescente (tornado).
  */
-function sensitivita(sim, ampiezzaPct = 10) {
+function sensitivita(sim, ampiezzaPct = 10, livello = 'voce') {
   const driver = [];
   for (const linea of sim.linee || []) {
+    if (livello === 'voce') {
+      for (const voce of linea.voci || []) {
+        if (costoVoce(voce, baseSimulato(sim), sim.tariffe) === 0) continue;
+        driver.push({
+          campo: 'voce',
+          chiave: voce.id,
+          etichetta: (voce.nome || 'senza nome') + ' · ' + linea.nome,
+        });
+      }
+      continue;
+    }
     for (const cat of CATEGORIE) {
       const chiave = linea.id + '|' + cat;
       const haVoci = (linea.voci || []).some((v) => v.cat === cat);
-      if (haVoci) driver.push({ chiave, etichetta: linea.nome + ' · ' + ETICHETTA_CATEGORIA[cat] });
+      if (haVoci) driver.push({ campo: 'catLinea', chiave, etichetta: linea.nome + ' · ' + ETICHETTA_CATEGORIA[cat] });
     }
   }
   const partenza = calcolaColonna(sim, 'simulato').mi;
   const righe = driver.map((d) => {
+    const campo = d.campo || 'catLinea';
     const conDelta = (segno) => {
       const clone = {
         ...sim,
         delta: {
           ...(sim.delta || {}),
-          catLinea: {
-            ...((sim.delta || {}).catLinea || {}),
-            [d.chiave]: num(((sim.delta || {}).catLinea || {})[d.chiave]) + segno * ampiezzaPct,
+          [campo]: {
+            ...((sim.delta || {})[campo] || {}),
+            [d.chiave]: num(((sim.delta || {})[campo] || {})[d.chiave]) + segno * ampiezzaPct,
           },
         },
       };
@@ -933,6 +962,37 @@ function scostamentoPerMargine(sim, marginePct, leva) {
   };
 }
 
+/**
+ * Costo della voce nella colonna simulata con tutti gli scostamenti applicati tranne
+ * quello della voce stessa. È il punto di partenza per fare il percorso inverso: se
+ * l'utente scrive direttamente quanto vuole che costi quella voce, da qui si ricava lo
+ * scostamento che produce quel numero.
+ */
+function costoVoceSenzaScostamentoProprio(sim, linea, voce) {
+  const d = sim.delta || {};
+  const f = (1 + frazione(d.globale))
+    * (1 + frazione((d.linea || {})[linea.id]))
+    * (1 + frazione((d.catLinea || {})[linea.id + '|' + voce.cat]));
+  return costoVoce(voce, baseSimulato(sim), sim.tariffe) * f;
+}
+
+/** Ricavo della linea nella colonna simulata senza lo scostamento proprio della linea. */
+function ricavoSenzaScostamentoProprio(sim, linea) {
+  const d = sim.delta || {};
+  return num((linea.ricavo || {})[baseSimulato(sim)]) * (1 + frazione(d.ricavo));
+}
+
+/**
+ * Scostamento da scrivere perché una grandezza assuma il valore voluto.
+ * Restituisce null quando il valore di partenza è zero: da zero nessun fattore
+ * moltiplicativo porta a un numero diverso da zero, e fingere il contrario darebbe
+ * un campo che accetta quello che scrivi e non lo rispetta.
+ */
+function scostamentoPerValore(partenza, voluto) {
+  if (!(Math.abs(partenza) > 1e-9)) return null;
+  return (num(voluto) / partenza - 1) * 100;
+}
+
 
 // ---- modello.mjs ----
 // Modello dati della simulazione: valori di default, voci suggerite, serializzazione.
@@ -1052,7 +1112,7 @@ function normalizza(raw) {
   };
   sim.linee = sim.linee.map((l) => ({
     id: l.id || id('l'),
-    nome: l.nome || 'Linea',
+    nome: l.nome || 'Servizio',
     ricavo: { preventivo: 0, kom: 0, ...(l.ricavo || {}) },
     voci: (l.voci || []).map((v) => {
       const voce = {
@@ -1386,7 +1446,7 @@ let sim = nuovaSimulazione();
 // Tre livelli di dettaglio. Si parte dal più semplice: nove numeri e un margine.
 // Il dettaglio si aggiunge quando serve, con pulsanti espliciti, non tutto subito.
 const LIVELLI = [
-  ['base', 'Base', 'Ricavo, materiale e manodopera per linea. Nove numeri in tutto.'],
+  ['base', 'Base', 'Ricavo, materiale e manodopera per servizio. Nove numeri in tutto.'],
   ['intermedio', 'Intermedio', 'Aggiunge la colonna Preventivo, gli altri costi diretti e le spese generali.'],
   ['completo', 'Completo', 'Righe per marca fornitore e tipo di manodopera, con tariffe orarie.'],
 ];
@@ -1418,6 +1478,7 @@ const usaStruttura = () => Number(sim.parametri.sgPct || 0) !== 0 || Number(sim.
 let scheda = 'dati';
 let riferimentoIncidenza = 'cd';
 let levaMargine = 'costi';
+let livelloSensitivita = 'voce';
 let margineVoluto = null;
 let elencoArchivio = [];
 let messaggio = null;
@@ -1701,6 +1762,65 @@ function larghezzaTabella(nValori, conAzione) {
  * disponibile e uno slot accessorio di larghezza fissa, presente anche quando è vuoto.
  * È lo slot vuoto a tenere allineate fra loro righe che hanno contenuti diversi.
  */
+/**
+ * Cella della colonna Simulato, scrivibile. È qui che si simula: si scrive quanto si vuole
+ * che quella voce costi e lo strumento ricava da sé lo scostamento che produce quel
+ * numero. Prima questa colonna era di sola lettura e l'unico modo di simulare erano i
+ * cursori in un'altra scheda, che è il motivo per cui non si capiva dove mettere i valori.
+ */
+function cellaSimulataVoce(linea, voce) {
+  const campo = h('input', {
+    type: 'text', inputmode: 'decimal', class: 'num principale simulato',
+    'data-out': 'voce:' + voce.id,
+    placeholder: '\u2014',
+    'aria-label': 'Costo simulato di ' + (voce.nome || 'questa voce'),
+    oninput: (e) => {
+      if (!sim.delta.voce) sim.delta.voce = {};
+      const testo = e.target.value.trim();
+      if (testo === '') { delete sim.delta.voce[voce.id]; aggiornaDerivati(); return; }
+      const partenza = costoVoceSenzaScostamentoProprio(sim, linea, voce);
+      const d = scostamentoPerValore(partenza, leggiNumero(testo));
+      if (d === null) {
+        avvisa('Questa voce parte da zero: inserisci prima un valore nella colonna ' + ETICHETTA_COLONNA[baseSimulato(sim)] + '.');
+        return;
+      }
+      sim.delta.voce[voce.id] = d;
+      aggiornaDerivati();
+    },
+  });
+  return h('td', { class: 'n', 'data-et': 'Simulato' },
+    h('div', { class: 'coppia coppia-valore' },
+      campo,
+      h('span', { class: 'accessorio' }, h('span', { class: 'suff', testo: '\u20ac' }))));
+}
+
+/** Stessa logica per il ricavo del servizio. */
+function cellaSimulataRicavo(linea) {
+  const campo = h('input', {
+    type: 'text', inputmode: 'decimal', class: 'num principale simulato',
+    'data-out': 'ricavo:' + linea.id,
+    placeholder: '\u2014',
+    'aria-label': 'Ricavo simulato di ' + (linea.nome || 'questo servizio'),
+    oninput: (e) => {
+      if (!sim.delta.ricavoLinea) sim.delta.ricavoLinea = {};
+      const testo = e.target.value.trim();
+      if (testo === '') { delete sim.delta.ricavoLinea[linea.id]; aggiornaDerivati(); return; }
+      const partenza = ricavoSenzaScostamentoProprio(sim, linea);
+      const d = scostamentoPerValore(partenza, leggiNumero(testo));
+      if (d === null) {
+        avvisa('Questo servizio parte da ricavo zero: inseriscilo prima nella colonna ' + ETICHETTA_COLONNA[baseSimulato(sim)] + '.');
+        return;
+      }
+      sim.delta.ricavoLinea[linea.id] = d;
+      aggiornaDerivati();
+    },
+  });
+  return h('td', { class: 'n', 'data-et': 'Simulato' },
+    h('div', { class: 'coppia coppia-valore' },
+      campo,
+      h('span', { class: 'accessorio' }, h('span', { class: 'suff', testo: '\u20ac' }))));
+}
+
 function cellaValore(voce, colonna, percorsoBase) {
   const accessorio = (...figli) => h('span', { class: 'accessorio' }, ...figli);
   let dentro;
@@ -1775,7 +1895,7 @@ function rigaVoce(linea, iL, voce, iV) {
   return h('tr', {},
     h('td', { 'data-et': 'Voce' }, ...celleNome),
     ...colonneInput().map((c) => cellaValore(voce, c, base)),
-    h('td', { class: 'n derivato', 'data-et': 'Simulato', 'data-out': 'voce:' + voce.id, testo: '\u2014' }),
+    cellaSimulataVoce(linea, voce),
     h('td', { class: 'azione-riga' }, h('button', {
       class: 'muto', title: 'Rimuovi voce', 'aria-label': 'Rimuovi voce', testo: '\u00d7',
       onclick: () => conAnnulla(`Voce "${voce.nome || 'senza nome'}" rimossa.`, () => linea.voci.splice(iV, 1)),
@@ -1787,9 +1907,9 @@ function tabellaLineaDettagliata(linea, iL) {
   const cols = colonneInput();
   const corpo = h('tbody', {});
   corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { 'data-et': 'Voce', testo: 'Ricavo di linea' }),
+    h('td', { 'data-et': 'Voce', testo: 'Ricavo del servizio' }),
     ...cols.map((c) => cellaRicavo(`linee.${iL}.ricavo.${c}`, linea.ricavo[c], c)),
-    h('td', { class: 'n derivato', 'data-et': 'Simulato', 'data-out': 'ricavo:' + linea.id, testo: '\u2014' }),
+    cellaSimulataRicavo(linea),
     h('td', { class: 'azione-riga' })));
 
   for (const cat of categorieVisibili(linea)) {
@@ -1834,9 +1954,9 @@ function tabellaLineaSemplice(linea, iL) {
   const cols = colonneInput();
   const corpo = h('tbody', {});
   corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { 'data-et': 'Voce', testo: 'Ricavo di linea' }),
+    h('td', { 'data-et': 'Voce', testo: 'Ricavo del servizio' }),
     ...cols.map((c) => cellaRicavo(`linee.${iL}.ricavo.${c}`, linea.ricavo[c], c)),
-    h('td', { class: 'n derivato', 'data-et': 'Simulato', 'data-out': 'ricavo:' + linea.id, testo: '\u2014' })));
+    cellaSimulataRicavo(linea)));
 
   for (const cat of categorieVisibili(linea)) {
     const voci = linea.voci.filter((v) => v.cat === cat);
@@ -1894,12 +2014,12 @@ function pannelloLinea(linea, iL) {
   return h('section', { class: 'pannello' },
     h('div', { class: 'linea-titolo' },
       h('input', {
-        type: 'text', value: linea.nome, 'aria-label': 'Nome della linea di servizio',
+        type: 'text', value: linea.nome, 'aria-label': 'Nome del servizio',
         oninput: (e) => { linea.nome = e.target.value; aggiornaDerivati(); },
       }),
       h('button', {
-        class: 'muto', title: 'Rimuovi la linea di servizio', 'aria-label': 'Rimuovi la linea di servizio', testo: '\u00d7',
-        onclick: () => conAnnulla(`Linea "${linea.nome}" rimossa con le sue ${linea.voci.length} voci.`, () => sim.linee.splice(iL, 1)),
+        class: 'muto', title: 'Rimuovi il servizio', 'aria-label': 'Rimuovi il servizio', testo: '\u00d7',
+        onclick: () => conAnnulla(`Servizio "${linea.nome}" rimossa con le sue ${linea.voci.length} voci.`, () => sim.linee.splice(iL, 1)),
       })),
     livello === 'completo' ? tabellaLineaDettagliata(linea, iL) : tabellaLineaSemplice(linea, iL));
 }
@@ -1930,6 +2050,25 @@ function pannelloLivello() {
       h('p', { class: 'nota', style: 'margin-top:6px', testo: corrente ? corrente[2] : '' })));
 }
 
+function guidaColonne() {
+  const base = ETICHETTA_COLONNA[baseSimulato(sim)];
+  const voci = [];
+  if (colonneInput().includes('preventivo')) voci.push(['Preventivo', 'i numeri dell\u2019offerta. Si scrivono una volta e restano come riferimento.']);
+  voci.push(['KOM', 'il budget concordato al kick off meeting. È la base su cui poggia la simulazione.']);
+  voci.push(['Simulato', `si scrive qui. Metti quanto pensi che quella voce costerà davvero e il margine si aggiorna subito. Svuotando la casella torna al valore ${base}.`]);
+
+  return h('section', { class: 'pannello pannello-guida-colonne' },
+    h('div', { class: 'corpo' },
+      h('h3', { class: 'sotto-titolo', testo: 'Dove si scrivono i valori' }),
+      h('dl', { class: 'guida-elenco' },
+        ...voci.flatMap(([et, testo]) => [h('dt', { testo: et }), h('dd', { testo })])),
+      h('p', { class: 'nota' }, 'Per variare più voci insieme, o per partire dal margine che vuoi ottenere, usa la scheda ',
+        h('button', {
+          class: 'muto commuta', testo: 'Simulazione',
+          onclick: () => { scheda = 'simulazione'; disegna(); },
+        }), '.')));
+}
+
 function schedaDati() {
   const espansioni = [];
   if (livello === 'base') {
@@ -1943,6 +2082,7 @@ function schedaDati() {
   return h('div', {},
     bannerEsempio(),
     pannelloLivello(),
+    guidaColonne(),
     pannelloCommessa(),
     pannelloParametri(),
     ...sim.linee.map((l, i) => pannelloLinea(l, i)),
@@ -1960,7 +2100,7 @@ function pannelloAggiungiLinea() {
   const presenti = new Set(sim.linee.map((l) => l.nome.trim().toLowerCase()));
   const mancanti = nomiLineeStandard().filter((n) => !presenti.has(n.trim().toLowerCase()));
   return h('section', { class: 'pannello' },
-    h('h2', { testo: 'Aggiungi una linea di servizio' }),
+    h('h2', { testo: 'Aggiungi un servizio' }),
     h('div', { class: 'corpo' },
       h('div', { class: 'azioni' },
         ...mancanti.map((n) => h('button', {
@@ -1968,16 +2108,16 @@ function pannelloAggiungiLinea() {
           onclick: () => {
             sim.linee.push(lineaStandard(n, sim.tariffe));
             disegna();
-            avvisa(`Linea "${n}" aggiunta con le sue voci di default.`);
+            avvisa(`Servizio "${n}" aggiunto con le sue voci di default.`);
           },
         })),
         h('button', {
-          testo: '+ linea personalizzata',
-          onclick: () => { sim.linee.push(nuovaLinea('Nuova linea')); disegna(); },
+          testo: '+ servizio personalizzato',
+          onclick: () => { sim.linee.push(nuovaLinea('Nuovo servizio')); disegna(); },
         })),
       mancanti.length
-        ? h('p', { class: 'nota', testo: 'Le linee standard tornano complete delle loro voci di default. I valori vanno reinseriti.' })
-        : h('p', { class: 'nota', testo: 'Tutte e tre le linee standard sono presenti.' })));
+        ? h('p', { class: 'nota', testo: 'I servizi standard tornano completi delle loro voci di default. I valori vanno reinseriti.' })
+        : h('p', { class: 'nota', testo: 'Tutti e tre i servizi standard sono presenti.' })));
 }
 
 // --- scheda simulazione ------------------------------------------------------------
@@ -2087,7 +2227,7 @@ function pannelloMargine() {
           testo: 'Azzera gli scostamenti',
           onclick: () => { sim.delta = { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: {}, voce: {} }; disegna(); },
         })),
-      h('p', { class: 'nota', testo: 'Lo scostamento calcolato finisce nei cursori qui sotto: da lì lo puoi ritoccare, distribuire su una singola linea o annullare.' })));
+      h('p', { class: 'nota', testo: 'Lo scostamento calcolato finisce nei cursori qui sotto: da lì lo puoi ritoccare, distribuire su un singolo servizio o annullare.' })));
 }
 
 function schedaSimulazione() {
@@ -2096,11 +2236,11 @@ function schedaSimulazione() {
     cursore('Tutti i ricavi', 'delta.ricavo', sim.delta.ricavo));
 
   const perLinea = sim.linee.map((l) => h('section', { class: 'pannello' },
-    h('h2', { testo: l.nome || 'Linea' }),
+    h('h2', { testo: l.nome || 'Servizio' }),
     h('div', { class: 'corpo' },
       h('div', { class: 'cursori' },
-        cursore('Ricavo della linea', `delta.ricavoLinea.${l.id}`, sim.delta.ricavoLinea?.[l.id] ?? 0),
-        cursore('Tutti i costi della linea', `delta.linea.${l.id}`, sim.delta.linea?.[l.id] ?? 0),
+        cursore('Ricavo del servizio', `delta.ricavoLinea.${l.id}`, sim.delta.ricavoLinea?.[l.id] ?? 0),
+        cursore('Tutti i costi del servizio', `delta.linea.${l.id}`, sim.delta.linea?.[l.id] ?? 0),
         ...CATEGORIE.filter((c) => l.voci.some((v) => v.cat === c)).map((c) =>
           cursore(ETICHETTA_CATEGORIA[c], `delta.catLinea.${l.id}|${c}`, sim.delta.catLinea?.[`${l.id}|${c}`] ?? 0, `catsim:${l.id}:${c}`))))));
 
@@ -2110,17 +2250,24 @@ function schedaSimulazione() {
     h('section', { class: 'pannello' },
       h('h2', { testo: 'Scostamenti complessivi' }),
       h('div', { class: 'corpo' }, globali,
-        h('p', { class: 'nota' }, 'Gli scostamenti si applicano alla colonna KOM e si compongono moltiplicativamente: complessivo, poi linea, poi categoria. Il KOM non viene modificato.'),
+        h('p', { class: 'nota' }, 'Gli scostamenti si applicano alla colonna KOM e si compongono moltiplicativamente: complessivo, poi servizio, poi categoria. Il KOM non viene modificato.'),
         h('button', {
           style: 'margin-top:8px', testo: 'Azzera tutti gli scostamenti',
           onclick: () => { sim.delta = { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: {}, voce: {} }; disegna(); },
         }))),
     ...perLinea,
     h('section', { class: 'pannello' },
-      h('h2', { testo: 'Sensitività: quali voci pesano di più' }),
+      h('h2', { testo: 'Dove conviene intervenire' }),
       h('div', { class: 'corpo' },
+        h('div', { class: 'azioni', style: 'margin-bottom:8px;align-items:center' },
+          h('span', { class: 'et-livello', testo: 'Dettaglio' }),
+          ...[['voce', 'Per voce'], ['categoria', 'Per categoria']].map(([k, et]) => h('button', {
+            class: livelloSensitivita === k ? 'selezionato' : '', testo: et,
+            'aria-pressed': livelloSensitivita === k ? 'true' : 'false',
+            onclick: () => { livelloSensitivita = k; disegna(); },
+          }))),
         h('div', { id: 'tornado' }),
-        h('p', { class: 'nota', testo: 'Effetto sul margine industriale simulato di una variazione di più o meno 10% su ciascun blocco, tenendo fermo tutto il resto. Ordinato per ampiezza.' }))));
+        h('p', { class: 'nota', testo: 'Effetto sul margine di una variazione di più o meno 10%, tenendo fermo tutto il resto. In cima c\u2019è la voce dove un punto guadagnato vale di più.' }))));
 }
 
 // --- scheda confronto --------------------------------------------------------------
@@ -2163,7 +2310,7 @@ function tabellaGap(titolo, chiave, sottotitolo) {
           riga('di cui effetto costo', 'effettoCosto')))),
       h('div', { class: 'tabellone', style: 'margin-top:10px' }, h('table', { class: 'tab-confronto' },
         h('thead', {}, h('tr', {},
-          h('th', { testo: 'Per linea di servizio' }),
+          h('th', { testo: 'Per servizio' }),
           h('th', { class: 'n', testo: 'Effetto ricavo' }),
           ...CATEGORIE.map((c) => h('th', { class: 'n', testo: ETICHETTA_CATEGORIA[c] })),
           h('th', { class: 'n', testo: 'Totale' }))),
@@ -2250,18 +2397,19 @@ function schedaGuida() {
     h('section', { class: 'pannello' },
       h('h2', { testo: 'A cosa serve' }),
       h('div', { class: 'corpo' },
-        h('p', {}, 'Simula come si muove il margine di una commessa al variare dei costi, divisi per linea di servizio. Non è un consuntivo e non tiene lo storico: ogni simulazione è una fotografia del momento in cui la fai. Quando serve, la salvi in archivio e non ci torni più sopra.'),
+        h('p', {}, 'Simula come si muove il margine di una commessa al variare dei costi, divisi per servizio. Non è un consuntivo e non tiene lo storico: ogni simulazione è una fotografia del momento in cui la fai. Quando serve, la salvi in archivio e non ci torni più sopra.'),
         h('p', {}, 'Tre colonne sulla stessa struttura: ',
           h('b', { testo: 'Preventivo' }), ' (l’offerta), ',
           h('b', { testo: 'KOM' }), ' (il budget concordato al kick off meeting) e ',
-          h('b', { testo: 'Simulato' }), ' (lo scenario che stai provando). Il simulato si ottiene muovendo i cursori, non riscrivendo i numeri.'))),
+          h('b', { testo: 'Simulato' }), ' (lo scenario che stai provando). La colonna Simulato si scrive: metti quanto pensi che una voce costerà davvero e il margine si aggiorna subito. Svuotando la casella torna al valore di partenza.'))),
 
     h('section', { class: 'pannello' },
       h('h2', { testo: 'Inizia semplice, aggiungi dettaglio dopo' }),
       h('div', { class: 'corpo' },
-        h('p', {}, 'Lo strumento si apre al livello Base: per ogni linea di servizio inserisci ricavo, materiale e manodopera. Nove numeri e hai un margine. Quando ti serve di più, i pulsanti nella scheda Dati espandono la maschera senza perdere nulla di quanto inserito.'),
+        h('p', {}, 'Lo strumento si apre al livello Base: per ogni servizio inserisci ricavo, materiale e manodopera. Nove numeri e hai un margine. Quando ti serve di più, i pulsanti nella scheda Dati espandono la maschera senza perdere nulla di quanto inserito.'),
+        h('p', {}, 'Dove si scrivono i valori: Preventivo e KOM sono i numeri di partenza, la colonna Simulato è quella su cui si lavora. Si scrive direttamente lì, voce per voce, ed è anche il modo per capire dove conviene ottimizzare: cambi una voce alla volta e guardi il margine.'),
         vociGuida([
-          ['Base', 'Ricavo, materiale e manodopera per linea, una colonna sola. Per una stima rapida, anche dal telefono.'],
+          ['Base', 'Ricavo, materiale e manodopera per servizio, una colonna sola. Per una stima rapida, anche dal telefono.'],
           ['Intermedio', 'Aggiunge la colonna Preventivo per il confronto con l’offerta, gli altri costi diretti (trasferte, noleggi, subappalti) e le spese generali.'],
           ['Completo', 'Righe per marca fornitore e tipo di manodopera, con tariffe orarie. È il livello per il budget esecutivo.'],
         ]),
@@ -2272,11 +2420,11 @@ function schedaGuida() {
       h('div', { class: 'corpo' },
         h('p', {}, 'Nella scheda Simulazione puoi partire da qualunque delle tre grandezze, a seconda della domanda che ti stai facendo. Non sono modalità che si escludono: agiscono tutte sugli stessi cursori.'),
         vociGuida([
-          ['Dai costi', 'Muovi i cursori dei costi, per linea o per categoria, e guardi dove finisce il margine. È la domanda "se sforo, cosa succede".'],
+          ['Dai costi', 'Scrivi il costo che ti aspetti nella colonna Simulato, oppure muovi i cursori per servizio o per categoria. È la domanda "se sforo, cosa succede".'],
           ['Dai ricavi', 'Muovi i cursori dei ricavi per simulare uno sconto in trattativa o una variante riconosciuta. È la domanda "quanto posso concedere".'],
           ['Dal margine', 'Scrivi il margine che vuoi ottenere e scegli se agire sui costi o sui ricavi: lo strumento calcola lo scostamento necessario e te lo mostra prima di applicarlo. È la domanda "cosa servirebbe per arrivarci".'],
         ]),
-        h('p', { class: 'nota' }, 'Il calcolo che parte dal margine non dà una risposta chiusa: produce uno scostamento normale, che finisce nei cursori e da lì si ritocca, si distribuisce su una singola linea o si annulla.'))),
+        h('p', { class: 'nota' }, 'Il calcolo che parte dal margine non dà una risposta chiusa: produce uno scostamento normale, che finisce nei cursori e da lì si ritocca, si distribuisce su un singolo servizio o si annulla.'))),
 
     h('section', { class: 'pannello' },
       h('h2', { testo: 'Come vedere da dove arriva un numero' }),
@@ -2478,10 +2626,10 @@ function disegnaTornado() {
   const c = $('#tornado');
   if (!c) return;
   c.textContent = '';
-  const s = sensitivita(sim, 10);
+  const s = sensitivita(sim, 10, livelloSensitivita);
   const righe = s.righe.slice(0, 10).filter((r) => r.ampiezza > 0);
   if (righe.length === 0) {
-    c.appendChild(h('p', { class: 'nota', testo: 'Inserisci dei costi nella colonna KOM per vedere quali voci pesano di più.' }));
+    c.appendChild(h('p', { class: 'nota', testo: 'Inserisci dei costi per vedere dove conviene intervenire.' }));
     return;
   }
   const maxA = Math.max(...righe.map((r) => Math.max(Math.abs(r.su), Math.abs(r.giu))));
@@ -2499,7 +2647,7 @@ function disegnaTornado() {
     }
     nodi.push(testoSvg(cx + semi + 6, yy + 11, euroSegnato(r.su), { 'font-size': 9.5, 'text-anchor': 'end', x: L - 4 }));
   });
-  nodi.push(testoSvg(cx, A - 6, 'margine industriale, effetto di ±10%', { 'text-anchor': 'middle', 'font-size': 9.5 }));
+  nodi.push(testoSvg(cx, A - 6, 'a sinistra il guadagno da una riduzione del 10%, a destra la perdita da un aumento', { 'text-anchor': 'middle', 'font-size': 9.5 }));
   c.appendChild(h('div', { class: 'tabellone' },
     svg('svg', { viewBox: `0 0 ${L} ${A}`, width: '100%', role: 'img', 'aria-label': 'Sensitività del margine ai driver di costo' }, ...nodi)));
 }
@@ -2510,9 +2658,16 @@ function disegnaTornado() {
 // Spiegazione del calcolo dietro ogni cella derivata, indicizzata per chiave di uscita.
 const spiegazioni = new Map();
 
-function scrivi(sel, testo, classe, spiegazione) {
+function scrivi(sel, testo, classe, spiegazione, grezzo) {
   if (spiegazione !== undefined && spiegazione !== null) spiegazioni.set(sel, spiegazione);
   for (const n of $$(`[data-out="${sel}"]`)) {
+    if (n.tagName === 'INPUT') {
+      // Non si riscrive il campo mentre ci si sta digitando dentro.
+      if (document.activeElement !== n && grezzo !== undefined) n.value = grezzo ? numero(grezzo) : '';
+      const s2 = spiegazioni.get(sel);
+      if (s2) n.setAttribute('title', s2);
+      continue;
+    }
     n.textContent = testo;
     n.classList.remove('v-buono', 'v-critico');
     if (classe) n.classList.add(classe);
@@ -2665,7 +2820,7 @@ function aggiornaDerivati() {
     scrivi('ricavo:' + linea.id, euro(l.ricavo), null,
       `Ricavo ${baseEt} ${euro(linea.ricavo[r.baseSimulazione])}`
       + (dRic.length ? `, con gli scostamenti ${dRic.join(' e ')}` : ', nessuno scostamento sui ricavi')
-      + ` = ${euro(l.ricavo)}.`);
+      + ` = ${euro(l.ricavo)}.`, l.ricavo);
 
     for (const cat of CATEGORIE) {
       const n = linea.voci.filter((v) => v.cat === cat).length;
@@ -2681,7 +2836,7 @@ function aggiornaDerivati() {
       parti.push(fattori.length
         ? `Scostamenti applicati: ${fattori.join(', ')}. Risultato simulato ${euro(costo)}.`
         : 'Nessuno scostamento applicato a questa voce.');
-      scrivi('voce:' + voce.id, euro(costo), null, parti.join(' '));
+      scrivi('voce:' + voce.id, euro(costo), null, parti.join(' '), costo);
     }
   }
 
@@ -2717,7 +2872,7 @@ function aggiornaDerivati() {
       tb.textContent = '';
       for (const l of g.perLinea) {
         tb.appendChild(h('tr', {},
-          h('td', { 'data-et': 'Linea', testo: l.nome }),
+          h('td', { 'data-et': 'Servizio', testo: l.nome }),
           h('td', { class: 'n ' + (l.effettoRicavo >= 0 ? 'v-buono' : 'v-critico'), 'data-et': 'Effetto ricavo', testo: euroSegnato(l.effettoRicavo) }),
           ...CATEGORIE.map((c) => h('td', { class: 'n ' + (l.perCategoria[c] >= 0 ? 'v-buono' : 'v-critico'), 'data-et': ETICHETTA_CATEGORIA[c], testo: euroSegnato(l.perCategoria[c]) })),
           h('td', { class: 'n', 'data-et': 'Totale', style: 'font-weight:600', testo: euroSegnato(l.dMdc) })));
@@ -2812,7 +2967,7 @@ function aggiornaDerivati() {
 
   const lettura = $('#lettura-riserva');
   if (lettura) {
-    if (!(s.ricavo > 0)) lettura.textContent = 'Inserisci i ricavi di linea per calcolare la riserva.';
+    if (!(s.ricavo > 0)) lettura.textContent = 'Inserisci i ricavi dei servizi per calcolare la riserva.';
     else if (s.riserva >= 0) lettura.textContent = `I costi possono crescere di ${euro(s.riserva)} (${perc(s.riservaPct)}) prima di scendere sotto il margine obiettivo.`;
     else lettura.textContent = `I costi superano già di ${euro(-s.riserva)} il massimo compatibile con il margine obiettivo: servono ${perc(-s.riservaPct)} di riduzione.`;
   }
@@ -2872,7 +3027,7 @@ function consegna(nomeFileCompleto, tipo, contenuto, titolo) {
 function esportaCsv() {
   const r = calcola(sim);
   const righe = [['Commessa', sim.meta.codice], ['Cliente', sim.meta.cliente], ['Data', sim.meta.data], []];
-  righe.push(['Linea', 'Categoria', 'Voce', 'Preventivo', 'KOM', 'Simulato']);
+  righe.push(['Servizio', 'Categoria', 'Voce', 'Preventivo', 'KOM', 'Simulato']);
   for (const linea of sim.linee) {
     for (const cat of CATEGORIE) {
       for (const v of linea.voci.filter((x) => x.cat === cat)) {

@@ -219,25 +219,37 @@ export function calcola(sim) {
  * Sensitività: impatto sul margine industriale simulato di una variazione del driver,
  * tenendo fermi gli altri. Ordinato per impatto decrescente (tornado).
  */
-export function sensitivita(sim, ampiezzaPct = 10) {
+export function sensitivita(sim, ampiezzaPct = 10, livello = 'voce') {
   const driver = [];
   for (const linea of sim.linee || []) {
+    if (livello === 'voce') {
+      for (const voce of linea.voci || []) {
+        if (costoVoce(voce, baseSimulato(sim), sim.tariffe) === 0) continue;
+        driver.push({
+          campo: 'voce',
+          chiave: voce.id,
+          etichetta: (voce.nome || 'senza nome') + ' · ' + linea.nome,
+        });
+      }
+      continue;
+    }
     for (const cat of CATEGORIE) {
       const chiave = linea.id + '|' + cat;
       const haVoci = (linea.voci || []).some((v) => v.cat === cat);
-      if (haVoci) driver.push({ chiave, etichetta: linea.nome + ' · ' + ETICHETTA_CATEGORIA[cat] });
+      if (haVoci) driver.push({ campo: 'catLinea', chiave, etichetta: linea.nome + ' · ' + ETICHETTA_CATEGORIA[cat] });
     }
   }
   const partenza = calcolaColonna(sim, 'simulato').mi;
   const righe = driver.map((d) => {
+    const campo = d.campo || 'catLinea';
     const conDelta = (segno) => {
       const clone = {
         ...sim,
         delta: {
           ...(sim.delta || {}),
-          catLinea: {
-            ...((sim.delta || {}).catLinea || {}),
-            [d.chiave]: num(((sim.delta || {}).catLinea || {})[d.chiave]) + segno * ampiezzaPct,
+          [campo]: {
+            ...((sim.delta || {})[campo] || {}),
+            [d.chiave]: num(((sim.delta || {})[campo] || {})[d.chiave]) + segno * ampiezzaPct,
           },
         },
       };
@@ -397,4 +409,35 @@ export function scostamentoPerMargine(sim, marginePct, leva) {
     variazione: richiesto - attuale.ricavo,
     negativo: false,
   };
+}
+
+/**
+ * Costo della voce nella colonna simulata con tutti gli scostamenti applicati tranne
+ * quello della voce stessa. È il punto di partenza per fare il percorso inverso: se
+ * l'utente scrive direttamente quanto vuole che costi quella voce, da qui si ricava lo
+ * scostamento che produce quel numero.
+ */
+export function costoVoceSenzaScostamentoProprio(sim, linea, voce) {
+  const d = sim.delta || {};
+  const f = (1 + frazione(d.globale))
+    * (1 + frazione((d.linea || {})[linea.id]))
+    * (1 + frazione((d.catLinea || {})[linea.id + '|' + voce.cat]));
+  return costoVoce(voce, baseSimulato(sim), sim.tariffe) * f;
+}
+
+/** Ricavo della linea nella colonna simulata senza lo scostamento proprio della linea. */
+export function ricavoSenzaScostamentoProprio(sim, linea) {
+  const d = sim.delta || {};
+  return num((linea.ricavo || {})[baseSimulato(sim)]) * (1 + frazione(d.ricavo));
+}
+
+/**
+ * Scostamento da scrivere perché una grandezza assuma il valore voluto.
+ * Restituisce null quando il valore di partenza è zero: da zero nessun fattore
+ * moltiplicativo porta a un numero diverso da zero, e fingere il contrario darebbe
+ * un campo che accetta quello che scrivi e non lo rispetta.
+ */
+export function scostamentoPerValore(partenza, voluto) {
+  if (!(Math.abs(partenza) > 1e-9)) return null;
+  return (num(voluto) / partenza - 1) * 100;
 }

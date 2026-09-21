@@ -182,6 +182,8 @@ input, select {
 }
 input:focus, select:focus { outline: 2px solid var(--accento); outline-offset: -1px; border-color: var(--accento); }
 input[type="number"], input.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+/* Anche fuori dalle tabelle un campo numerico non si allunga oltre il necessario. */
+label.campo input.num { max-width: 160px; }
 input:read-only { background: var(--surface-2); color: var(--ink-2); }
 
 .tabellone { overflow-x: auto; }
@@ -364,6 +366,21 @@ button.commuta {
 }
 button.commuta:hover { color: var(--accento); border-color: var(--accento); }
 td.azione-riga, th.azione-riga { width: 34px; }
+
+/* --- colonna simulata, scrivibile --- */
+input.num.simulato {
+  color: var(--accento);
+  font-weight: 600;
+  border-color: color-mix(in srgb, var(--accento) 45%, var(--linea-forte));
+  background: color-mix(in srgb, var(--accento-tenue) 45%, var(--surface));
+}
+input.num.simulato:focus { background: var(--surface); }
+input.num.simulato::placeholder { color: var(--ink-3); font-weight: 400; }
+table.tab-dati th:last-of-type, table.tab-dati th.n:nth-last-child(2) { color: var(--accento); }
+
+.pannello-guida-colonne { border-left: 3px solid var(--accento); }
+.pannello-guida-colonne .guida-elenco { margin-bottom: 6px; }
+.pannello-guida-colonne dt { color: var(--accento); }
 
 /* --- partire dal margine --- */
 .riga-margine {

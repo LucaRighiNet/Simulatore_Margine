@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   calcola, calcolaColonna, costoVoce, fattoreVoce, gap, sensitivita, baseSimulato, incidenze,
-  modoManodopera, scostamentoPerMargine, CATEGORIE,
+  modoManodopera, scostamentoPerMargine, costoVoceSenzaScostamentoProprio,
+  ricavoSenzaScostamentoProprio, scostamentoPerValore, CATEGORIE,
 } from '../src/calcolo.mjs';
 import { nuovaSimulazione, simulazioneEsempio, normalizza, nomeFile } from '../src/modello.mjs';
 
@@ -368,4 +369,59 @@ test('per alzare il margine i costi devono scendere e i ricavi salire', () => {
   const v = scostamentoPerMargine(s, 20, 'ricavi');
   assert.ok(c.deltaPct < 0, 'i costi devono scendere');
   assert.ok(v.deltaPct > 0, 'i ricavi devono salire');
+});
+
+test('scrivendo il costo voluto si ricava lo scostamento che lo produce', () => {
+  const sim = simMinima({ rKom: 1000, cKom: 800 });
+  const linea = sim.linee[0];
+  const voce = linea.voci[0];
+  const partenza = costoVoceSenzaScostamentoProprio(sim, linea, voce);
+  vicino(partenza, 800);
+  sim.delta = { voce: { V1: scostamentoPerValore(partenza, 620) } };
+  vicino(calcolaColonna(sim, 'simulato').cd, 620);
+});
+
+test('il valore scritto resta rispettato anche con altri scostamenti gia applicati', () => {
+  const sim = simMinima({ rKom: 1000, cKom: 800 });
+  sim.delta = { globale: 20, linea: { L1: 10 } };
+  const partenza = costoVoceSenzaScostamentoProprio(sim, sim.linee[0], sim.linee[0].voci[0]);
+  sim.delta.voce = { V1: scostamentoPerValore(partenza, 500) };
+  vicino(calcolaColonna(sim, 'simulato').cd, 500);
+});
+
+test('scrivendo il ricavo voluto si ricava lo scostamento di linea', () => {
+  const sim = simMinima({ rKom: 1000, cKom: 800 });
+  const partenza = ricavoSenzaScostamentoProprio(sim, sim.linee[0]);
+  sim.delta = { ricavoLinea: { L1: scostamentoPerValore(partenza, 1250) } };
+  vicino(calcolaColonna(sim, 'simulato').ricavo, 1250);
+});
+
+test('da un valore di partenza nullo non si ricava alcuno scostamento', () => {
+  assert.equal(scostamentoPerValore(0, 500), null);
+  const sim = simMinima({ rKom: 1000, cKom: 0 });
+  assert.equal(costoVoceSenzaScostamentoProprio(sim, sim.linee[0], sim.linee[0].voci[0]), 0);
+});
+
+test('la sensitivita per voce nomina la voce e non la categoria', () => {
+  const sim = simulazioneEsempio();
+  const s = sensitivita(sim, 10, 'voce');
+  assert.ok(s.righe.length > 6, 'devono comparire le singole voci');
+  assert.match(s.righe[0].etichetta, /Componenti elettrici/);
+  for (let i = 1; i < s.righe.length; i += 1) {
+    assert.ok(s.righe[i - 1].ampiezza >= s.righe[i].ampiezza);
+  }
+});
+
+test('la sensitivita per categoria resta disponibile e coerente', () => {
+  const sim = simulazioneEsempio();
+  const perVoce = sensitivita(sim, 10, 'voce');
+  const perCat = sensitivita(sim, 10, 'categoria');
+  assert.ok(perVoce.righe.length > perCat.righe.length);
+  vicino(perVoce.base, perCat.base);
+  assert.match(perCat.righe[0].etichetta, /Quadri elettrici/);
+});
+
+test('le voci a costo zero non compaiono fra i driver', () => {
+  const sim = nuovaSimulazione();
+  assert.equal(sensitivita(sim, 10, 'voce').righe.length, 0);
 });
