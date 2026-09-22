@@ -211,9 +211,9 @@ tr.cat td {
 }
 tr.somma td { font-weight: 600; background: color-mix(in srgb, var(--accento-tenue) 55%, transparent); }
 tr.somma td.n { font-family: var(--mono); }
-.linea-titolo { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--linea); }
-.linea-titolo input { font-size: 14px; font-weight: 600; border-color: transparent; background: none; }
-.linea-titolo input:hover { border-color: var(--linea-forte); }
+.servizio-titolo { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--linea); }
+.servizio-titolo input { font-size: 14px; font-weight: 600; border-color: transparent; background: none; }
+.servizio-titolo input:hover { border-color: var(--linea-forte); }
 
 .coppia { display: flex; gap: 4px; align-items: center; }
 .coppia input { width: 100%; }
@@ -370,15 +370,22 @@ table.tab-dati td.azione-riga { padding-top: 8px; }
 }
 .valore-vivo b { font-family: var(--mono); color: var(--ink-2); font-weight: 500; }
 
-/* --- scelta del livello di dettaglio --- */
-.pannello-livello .corpo { padding-top: 10px; padding-bottom: 10px; }
-.scelta-livello { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+/* --- colonne percentuali fra uno stadio e l'altro --- */
+.cella-pct { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.coppia-pct { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.coppia-pct input.pct {
+  width: 44px; padding-left: 4px; padding-right: 4px;
+  font-size: 13px; color: var(--ink-2);
+}
+.coppia-pct input.pct:placeholder-shown { color: var(--ink-3); }
+.coppia-pct .suff { font-size: 10px; color: var(--ink-3); }
+th.th-pct { color: var(--ink-3); font-size: 11px; letter-spacing: 0; }
+th.th-simulato { color: var(--accento); }
+td.col-simulato { background: color-mix(in srgb, var(--accento-tenue) 35%, transparent); }
 .et-livello {
   font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-3); font-weight: 600;
 }
 .gruppo-bottoni { display: flex; flex-wrap: wrap; gap: 4px; }
-button.espandi { border-style: dashed; color: var(--accento); border-color: var(--accento); }
-button.espandi:hover { background: var(--accento-tenue); }
 button.commuta {
   font-size: 10.5px; border: 1px solid var(--linea); border-radius: 99px;
   padding: 1px 8px; color: var(--ink-3);
@@ -526,7 +533,11 @@ table.tab-dati th:last-of-type, table.tab-dati th.n:nth-last-child(2) { color: v
   table.tab-dati td.azione-riga::before { content: none; }
   table.tab-dati td.azione-riga:empty { display: none; }
   table.tab-dati .coppia { flex: 1 1 auto; justify-content: flex-end; }
-  table.tab-dati td input:not(.sconto) { max-width: 150px; }
+  table.tab-dati td:not(:first-child) input:not(.pct) { max-width: 150px; }
+  table.tab-dati td:first-child input { width: 100%; max-width: none; }
+  table.tab-dati td.cella-pct { background: none; }
+  .coppia-pct { justify-content: flex-end; }
+  .coppia-pct input.pct { width: 64px; }
   table.tab-dati tr.cat td { border-radius: var(--r); }
   table.tab-confronto tr.somma td:first-child,
   table.tab-dati tr.somma td:first-child { border-bottom-color: var(--linea-forte); }
@@ -560,16 +571,36 @@ table.tab-dati th:last-of-type, table.tab-dati th.n:nth-last-child(2) { color: v
 // ---- calcolo.mjs ----
 // Motore di calcolo del simulatore di margine di commessa.
 // Modulo puro: nessun accesso al DOM, nessuno stato globale, nessuna dipendenza.
-// È il punto del sistema dove un errore costa di più, quindi vive separato ed è testato.
+//
+// Modello a stadi. Ogni voce parte da un valore di preventivo e attraversa tre riduzioni
+// successive, ognuna espressa in percentuale: la trattativa con i fornitori, il budget
+// concordato al kick off meeting, e lo scenario simulato. Il valore di uno stadio è il
+// valore dello stadio precedente meno la sua percentuale.
+//
+//   Preventivo --%trattativa--> Dopo trattativa --%kom--> KOM --%simulato--> Simulato
+//
+// Una percentuale negativa è un aumento, ed è ammessa: succede che un budget salga.
 
-const COLONNE = ['preventivo', 'kom', 'simulato'];
-const CATEGORIE = ['materiale', 'manodopera', 'altri'];
+const STADI = ['preventivo', 'trattativa', 'kom', 'simulato'];
 
-const ETICHETTA_COLONNA = {
+/** Le riduzioni, nell'ordine in cui portano da uno stadio al successivo. */
+const RIDUZIONI = ['trattativa', 'kom', 'simulato'];
+
+const ETICHETTA_STADIO = {
   preventivo: 'Preventivo',
+  trattativa: 'Preventivo dopo trattativa',
   kom: 'KOM',
   simulato: 'Simulato',
 };
+
+const ETICHETTA_STADIO_BREVE = {
+  preventivo: 'Preventivo',
+  trattativa: 'Dopo trattativa',
+  kom: 'KOM',
+  simulato: 'Simulato',
+};
+
+const CATEGORIE = ['materiale', 'manodopera', 'altri'];
 
 const ETICHETTA_CATEGORIA = {
   materiale: 'Materiale',
@@ -583,448 +614,247 @@ const num = (v) => {
 };
 
 // Le percentuali sono memorizzate come numeri leggibili (8 significa 8%).
-// Internamente si lavora in frazioni.
 const frazione = (v) => num(v) / 100;
-
-/**
- * Come si inserisce una voce di manodopera. In ore per tariffa oraria quando la tariffa
- * aziendale è nota, ed è la forma che permette di simulare uno sforo di ore; a importo
- * quando si sta facendo una stima rapida e le tariffe non sono ancora state impostate.
- * Senza questa distinzione una riga di manodopera priva di tariffa costerebbe zero in
- * silenzio, che è il modo peggiore di sbagliare un margine.
- */
-function modoManodopera(voce) {
-  if (voce.modo === 'ore' || voce.modo === 'importo') return voce.modo;
-  return voce.tariffaId ? 'ore' : 'importo';
-}
-
-/** Costo di una singola voce nella colonna indicata, prima degli scostamenti. */
-function costoVoce(voce, colonna, tariffe) {
-  const d = voce[colonna] || {};
-  if (voce.cat === 'manodopera') {
-    if (modoManodopera(voce) === 'importo') return num(d.q);
-    const t = (tariffe || []).find((x) => x.id === voce.tariffaId);
-    return num(d.q) * num(t && t.eurOra);
-  }
-  return num(d.q) * (1 - frazione(d.sconto));
-}
-
-/** Fattore moltiplicativo degli scostamenti applicabili a una voce. */
-function fattoreVoce(sim, linea, voce) {
-  const d = sim.delta || {};
-  return (
-    (1 + frazione(d.globale)) *
-    (1 + frazione((d.linea || {})[linea.id])) *
-    (1 + frazione((d.catLinea || {})[linea.id + '|' + voce.cat])) *
-    (1 + frazione((d.voce || {})[voce.id]))
-  );
-}
-
-/**
- * Su quale colonna poggia la simulazione. Normalmente il KOM, che è il budget di cui il PM
- * risponde. Se il KOM non è ancora stato compilato la simulazione poggia sul preventivo:
- * senza questo ripiego, chi compila solo il preventivo muove i cursori e non vede nulla,
- * perché moltiplicare zero per qualunque scostamento dà zero.
- */
-function baseSimulato(sim) {
-  const haKom = (sim.linee || []).some((l) => (
-    num((l.ricavo || {}).kom) !== 0
-    || (l.voci || []).some((v) => num((v.kom || {}).q) !== 0)
-  ));
-  return haKom ? 'kom' : 'preventivo';
-}
-
-/** Costo di una voce nella colonna simulato: colonna base moltiplicata per gli scostamenti. */
-function costoVoceSimulato(sim, linea, voce, base) {
-  return costoVoce(voce, base || baseSimulato(sim), sim.tariffe) * fattoreVoce(sim, linea, voce);
-}
-
-function ricavoLinea(sim, linea, colonna, base) {
-  if (colonna !== 'simulato') return num((linea.ricavo || {})[colonna]);
-  const d = sim.delta || {};
-  return (
-    num((linea.ricavo || {})[base]) *
-    (1 + frazione(d.ricavo)) *
-    (1 + frazione((d.ricavoLinea || {})[linea.id]))
-  );
-}
-
-function costoDellaVoce(sim, linea, voce, colonna, base) {
-  return colonna === 'simulato'
-    ? costoVoceSimulato(sim, linea, voce, base)
-    : costoVoce(voce, colonna, sim.tariffe);
-}
 
 const rapporto = (a, b) => (b !== 0 ? a / b : null);
 
-/** Calcola una colonna completa: dettaglio per linea e totali di commessa. */
-function calcolaColonna(sim, colonna) {
-  const base = colonna === 'simulato' ? baseSimulato(sim) : colonna;
+/** Indice dello stadio, per sapere quante riduzioni applicare. */
+function indiceStadio(stadio) {
+  const i = STADI.indexOf(stadio);
+  return i < 0 ? 0 : i;
+}
+
+/**
+ * Valore di una grandezza a stadi (una voce di costo o il ricavo di un servizio) allo
+ * stadio richiesto. `elemento` ha forma { base, rid: { trattativa, kom, simulato } }.
+ */
+function valoreAStadio(elemento, stadio) {
+  let v = num(elemento && elemento.base);
+  const fino = indiceStadio(stadio);
+  for (let i = 0; i < fino; i += 1) {
+    v *= 1 - frazione((elemento.rid || {})[RIDUZIONI[i]]);
+  }
+  return v;
+}
+
+/**
+ * Percentuale da scrivere in una riduzione perché lo stadio assuma il valore voluto.
+ * Restituisce null se lo stadio precedente vale zero: da zero nessuna percentuale porta
+ * a un numero diverso da zero, e accettare comunque il valore significherebbe mostrare
+ * un campo che non rispetta quello che ci scrivi.
+ */
+function riduzionePerValore(elemento, stadio, voluto) {
+  const i = indiceStadio(stadio);
+  if (i === 0) return null;
+  const precedente = valoreAStadio(elemento, STADI[i - 1]);
+  if (!(Math.abs(precedente) > 1e-9)) return null;
+  return (1 - num(voluto) / precedente) * 100;
+}
+
+function costoVoce(voce, stadio) {
+  return valoreAStadio(voce, stadio);
+}
+
+/** Calcola uno stadio completo: dettaglio per servizio e totali di commessa. */
+function calcolaStadio(sim, stadio) {
   const p = sim.parametri || {};
-  const sg = frazione(p.sgPct);
-  const ctg = frazione(p.ctgPct);
+  const riserva = frazione(p.riservaPct);
   const target = frazione(p.targetPct);
 
-  const linee = (sim.linee || []).map((linea) => {
+  const servizi = (sim.servizi || []).map((s) => {
     const perCategoria = {};
     for (const cat of CATEGORIE) perCategoria[cat] = 0;
     const voci = {};
-    for (const voce of linea.voci || []) {
-      const c = costoDellaVoce(sim, linea, voce, colonna, base);
+    for (const voce of s.voci || []) {
+      const c = valoreAStadio(voce, stadio);
       perCategoria[voce.cat] = (perCategoria[voce.cat] || 0) + c;
       voci[voce.id] = c;
     }
-    const cd = CATEGORIE.reduce((s, cat) => s + perCategoria[cat], 0);
-    const r = ricavoLinea(sim, linea, colonna, base);
-    const mdc = r - cd;
-    return {
-      id: linea.id,
-      nome: linea.nome,
-      perCategoria,
-      voci,
-      cd,
-      ricavo: r,
-      mdc,
-      mdcPct: rapporto(mdc, r),
-    };
+    const cd = CATEGORIE.reduce((acc, cat) => acc + perCategoria[cat], 0);
+    const ricavo = valoreAStadio(s.ricavo, stadio);
+    const mdc = ricavo - cd;
+    return { id: s.id, nome: s.nome, perCategoria, voci, cd, ricavo, mdc, mdcPct: rapporto(mdc, ricavo) };
   });
 
-  const cd = linee.reduce((s, l) => s + l.cd, 0);
-  const ricavo = linee.reduce((s, l) => s + l.ricavo, 0);
+  const cd = servizi.reduce((acc, s) => acc + s.cd, 0);
+  const ricavo = servizi.reduce((acc, s) => acc + s.ricavo, 0);
   const mdc = ricavo - cd;
-  const speseGenerali = cd * sg;
-  const contingency = cd * ctg;
-  const mi = ricavo - cd - speseGenerali - contingency;
+  const imprevisti = cd * riserva;
+  const mi = ricavo - cd - imprevisti;
 
-  // Costo massimo compatibile con il margine industriale obiettivo:
-  // MI = R - CD(1+sg+ctg) >= target*R  =>  CD <= R(1-target)/(1+sg+ctg)
-  const cdMax = (ricavo * (1 - target)) / (1 + sg + ctg);
-  const riserva = cdMax - cd;
+  // Costo massimo compatibile con il margine obiettivo:
+  // MI = R - CD(1+riserva) >= target*R  =>  CD <= R(1-target)/(1+riserva)
+  const cdMax = (ricavo * (1 - target)) / (1 + riserva);
+  const spazio = cdMax - cd;
 
   return {
-    colonna,
-    base,
-    linee,
+    stadio,
+    servizi,
     cd,
     ricavo,
     mdc,
     mdcPct: rapporto(mdc, ricavo),
-    speseGenerali,
-    contingency,
+    imprevisti,
     mi,
     miPct: rapporto(mi, ricavo),
     cdMax,
-    riserva,
-    riservaPct: rapporto(riserva, cd),
+    spazio,
+    spazioPct: rapporto(spazio, cd),
   };
 }
 
-/**
- * Confronto fra due colonne. Restituisce le tre grandezze distinte che il documento
- * di proposta impone di non confondere: variazione assoluta in euro, variazione della
- * marginalità in punti percentuali, variazione relativa del margine in percentuale.
- */
-function gap(a, b) {
-  const pp = (x, y) => (x === null || y === null ? null : (y - x) * 100);
-  // La variazione relativa non ha significato se il margine di partenza non è positivo.
-  const rel = (x, y) => (x > 0 ? ((y - x) / x) * 100 : null);
+/** Calcolo completo: i quattro stadi e il passaggio da uno al successivo. */
+function calcola(sim) {
+  const stadi = {};
+  for (const s of STADI) stadi[s] = calcolaStadio(sim, s);
 
-  const effettoCostoPerLinea = b.linee.map((lb) => {
-    const la = a.linee.find((x) => x.id === lb.id);
-    const base = la || { cd: 0, ricavo: 0, perCategoria: {} };
-    const perCategoria = {};
-    for (const cat of CATEGORIE) {
-      perCategoria[cat] = -((lb.perCategoria[cat] || 0) - (base.perCategoria[cat] || 0));
-    }
+  const passaggi = RIDUZIONI.map((r, i) => {
+    const da = stadi[STADI[i]];
+    const a = stadi[STADI[i + 1]];
+    const pp = (x, y) => (x === null || y === null ? null : (y - x) * 100);
     return {
-      id: lb.id,
-      nome: lb.nome,
-      effettoRicavo: lb.ricavo - base.ricavo,
-      effettoCosto: -(lb.cd - base.cd),
-      perCategoria,
-      dMdc: lb.mdc - (base.mdc || 0),
+      riduzione: r,
+      da: da.stadio,
+      a: a.stadio,
+      dRicavo: a.ricavo - da.ricavo,
+      dCd: a.cd - da.cd,
+      dMdc: a.mdc - da.mdc,
+      dMdcPp: pp(da.mdcPct, a.mdcPct),
+      dMi: a.mi - da.mi,
+      dMiPp: pp(da.miPct, a.miPct),
+      effettoRicavo: a.ricavo - da.ricavo,
+      effettoCosto: -(a.cd - da.cd),
     };
   });
 
-  return {
-    da: a.colonna,
-    a: b.colonna,
-    dMdc: b.mdc - a.mdc,
-    dMdcPp: pp(a.mdcPct, b.mdcPct),
-    dMdcRel: rel(a.mdc, b.mdc),
-    dMi: b.mi - a.mi,
-    dMiPp: pp(a.miPct, b.miPct),
-    dMiRel: rel(a.mi, b.mi),
-    dRicavo: b.ricavo - a.ricavo,
-    dCd: b.cd - a.cd,
-    effettoRicavo: b.ricavo - a.ricavo,
-    effettoCosto: -(b.cd - a.cd),
-    perLinea: effettoCostoPerLinea,
-  };
-}
-
-/** Calcolo completo: le tre colonne e i due gap. */
-function calcola(sim) {
-  const colonne = {};
-  for (const c of COLONNE) colonne[c] = calcolaColonna(sim, c);
-  return {
-    colonne,
-    baseSimulazione: baseSimulato(sim),
-    gapPreventivoKom: gap(colonne.preventivo, colonne.kom),
-    gapKomSimulato: gap(colonne.kom, colonne.simulato),
-  };
+  return { stadi, passaggi };
 }
 
 /**
- * Sensitività: impatto sul margine industriale simulato di una variazione del driver,
- * tenendo fermi gli altri. Ordinato per impatto decrescente (tornado).
+ * Quali voci pesano di più: effetto sul margine simulato di una riduzione aggiuntiva,
+ * applicata a quella sola voce. Ordinate per impatto decrescente.
  */
-function sensitivita(sim, ampiezzaPct = 10, livello = 'voce') {
-  const driver = [];
-  for (const linea of sim.linee || []) {
-    if (livello === 'voce') {
-      for (const voce of linea.voci || []) {
-        if (costoVoce(voce, baseSimulato(sim), sim.tariffe) === 0) continue;
-        driver.push({
-          campo: 'voce',
-          chiave: voce.id,
-          etichetta: (voce.nome || 'senza nome') + ' · ' + linea.nome,
-        });
-      }
-      continue;
-    }
-    for (const cat of CATEGORIE) {
-      const chiave = linea.id + '|' + cat;
-      const haVoci = (linea.voci || []).some((v) => v.cat === cat);
-      if (haVoci) driver.push({ campo: 'catLinea', chiave, etichetta: linea.nome + ' · ' + ETICHETTA_CATEGORIA[cat] });
-    }
-  }
-  const partenza = calcolaColonna(sim, 'simulato').mi;
-  const righe = driver.map((d) => {
-    const campo = d.campo || 'catLinea';
-    const conDelta = (segno) => {
+function sensitivita(sim, ampiezzaPct = 10) {
+  const partenza = calcolaStadio(sim, 'simulato').mi;
+  const righe = [];
+
+  for (const servizio of sim.servizi || []) {
+    for (const voce of servizio.voci || []) {
+      const attuale = valoreAStadio(voce, 'simulato');
+      if (!(attuale > 0)) continue;
       const clone = {
         ...sim,
-        delta: {
-          ...(sim.delta || {}),
-          [campo]: {
-            ...((sim.delta || {})[campo] || {}),
-            [d.chiave]: num(((sim.delta || {})[campo] || {})[d.chiave]) + segno * ampiezzaPct,
-          },
-        },
+        servizi: sim.servizi.map((s) => (s.id !== servizio.id ? s : {
+          ...s,
+          voci: s.voci.map((v) => (v.id !== voce.id ? v : {
+            ...v,
+            rid: { ...(v.rid || {}), simulato: num((v.rid || {}).simulato) + ampiezzaPct },
+          })),
+        })),
       };
-      return calcolaColonna(clone, 'simulato').mi;
-    };
-    const su = conDelta(1) - partenza;
-    const giu = conDelta(-1) - partenza;
-    return { ...d, su, giu, ampiezza: Math.abs(su - giu) };
-  });
-  righe.sort((x, y) => y.ampiezza - x.ampiezza);
+      const guadagno = calcolaStadio(clone, 'simulato').mi - partenza;
+      righe.push({
+        idVoce: voce.id,
+        idServizio: servizio.id,
+        etichetta: (voce.nome || 'senza nome') + (sim.servizi.length > 1 ? ' · ' + servizio.nome : ''),
+        attuale,
+        guadagno,
+        categoria: voce.cat,
+      });
+    }
+  }
+
+  righe.sort((a, b) => b.guadagno - a.guadagno);
   return { base: partenza, ampiezzaPct, righe };
 }
 
-const RIFERIMENTI_INCIDENZA = {
-  cd: 'Costi diretti',
-  ricavo: 'Ricavo',
-};
-
 /**
- * Peso di ogni voce sul totale, colonna per colonna, e sua variazione fra le colonne.
- *
- * Il riferimento cambia la domanda a cui si risponde, e le due letture non sono
- * intercambiabili:
- *  - 'cd'     quanto pesa la voce sui costi diretti. Descrive la composizione del costo.
- *             Uno scostamento uniforme su tutte le voci non la muove di un punto.
- *  - 'ricavo' quanto pesa la voce sul ricavo. Descrive quanto della commessa se ne va in
- *             quella voce, e si muove per qualunque scostamento. Sommata al margine di
- *             contribuzione fa 100%.
- *
- * Restituisce righe piatte già ordinate e annidate (livello 0 linea, 1 categoria, 2 voce),
- * pronte per essere stampate, così l'interfaccia non deve ricostruire la gerarchia.
+ * Riduzione uniforme da applicare allo stadio simulato di tutte le voci perché la
+ * commessa raggiunga il margine voluto. Restituisce un motivo, non un numero, quando
+ * il margine non è raggiungibile agendo sui costi.
  */
+function riduzionePerMargine(sim, marginePct) {
+  const m = frazione(marginePct);
+  if (m >= 1) return { possibile: false, motivo: 'Un margine del 100% o più non è raggiungibile.' };
+
+  const riserva = frazione((sim.parametri || {}).riservaPct);
+  const attuale = calcolaStadio(sim, 'simulato');
+  if (!(attuale.ricavo > 0)) {
+    return { possibile: false, motivo: 'Serve un ricavo maggiore di zero per calcolare i costi ammessi.' };
+  }
+
+  // Costi allo stadio KOM: sono la base su cui agisce la riduzione simulata.
+  const partenza = calcolaStadio(sim, 'kom').cd;
+  if (!(partenza > 0)) {
+    return { possibile: false, motivo: 'Serve almeno un costo inserito su cui agire.' };
+  }
+
+  const richiesto = (attuale.ricavo * (1 - m)) / (1 + riserva);
+  if (richiesto < 0) {
+    return { possibile: false, motivo: 'Con questo ricavo il margine voluto imporrebbe costi negativi.' };
+  }
+  return {
+    possibile: true,
+    riduzionePct: (1 - richiesto / partenza) * 100,
+    attuale: attuale.cd,
+    richiesto,
+    variazione: richiesto - attuale.cd,
+  };
+}
+
+/** Peso di ogni voce sul totale, stadio per stadio. */
 function incidenze(sim, risultato, riferimento = 'cd') {
-  const denom = (col) => (riferimento === 'ricavo' ? col.ricavo : col.cd);
-  const quota = (valore, col) => {
-    const d = denom(col);
+  const denom = (st) => (riferimento === 'ricavo' ? st.ricavo : st.cd);
+  const quota = (valore, st) => {
+    const d = denom(st);
     return d ? valore / d : null;
   };
-  const perColonna = (fn) => {
+  const perStadio = (fn) => {
     const o = {};
-    for (const c of COLONNE) o[c] = fn(risultato.colonne[c]);
+    for (const s of STADI) o[s] = fn(risultato.stadi[s]);
     return o;
   };
-  const pp = (a, b) => (a === null || b === null ? null : (b - a) * 100);
-  const conDelta = (valori) => ({
-    valori,
-    dPreventivoKom: pp(valori.preventivo, valori.kom),
-    dKomSimulato: pp(valori.kom, valori.simulato),
-  });
 
   const righe = [];
-  for (const linea of sim.linee || []) {
-    const perLinea = (col) => {
-      const l = col.linee.find((x) => x.id === linea.id);
-      return l ? quota(l.cd, col) : null;
-    };
-    righe.push({ livello: 0, tipo: 'linea', id: linea.id, nome: linea.nome || 'Linea', ...conDelta(perColonna(perLinea)) });
-
+  for (const servizio of sim.servizi || []) {
     for (const cat of CATEGORIE) {
-      const voci = (linea.voci || []).filter((v) => v.cat === cat);
-      if (voci.length === 0) continue;
-      const perCat = (col) => {
-        const l = col.linee.find((x) => x.id === linea.id);
-        return l ? quota(l.perCategoria[cat] || 0, col) : null;
-      };
-      righe.push({ livello: 1, tipo: 'categoria', id: linea.id + '|' + cat, nome: ETICHETTA_CATEGORIA[cat], ...conDelta(perColonna(perCat)) });
-
+      const voci = (servizio.voci || []).filter((v) => v.cat === cat);
+      if (!voci.length) continue;
+      righe.push({
+        livello: 0, tipo: 'categoria', id: servizio.id + '|' + cat, nome: ETICHETTA_CATEGORIA[cat],
+        valori: perStadio((st) => {
+          const s = st.servizi.find((x) => x.id === servizio.id);
+          return s ? quota(s.perCategoria[cat] || 0, st) : null;
+        }),
+      });
       for (const voce of voci) {
-        const perVoce = (col) => {
-          const l = col.linee.find((x) => x.id === linea.id);
-          return l ? quota(l.voci[voce.id] || 0, col) : null;
-        };
-        righe.push({ livello: 2, tipo: 'voce', id: voce.id, nome: voce.nome || 'senza nome', ...conDelta(perColonna(perVoce)) });
+        righe.push({
+          livello: 1, tipo: 'voce', id: voce.id, nome: voce.nome || 'senza nome',
+          valori: perStadio((st) => {
+            const s = st.servizi.find((x) => x.id === servizio.id);
+            return s ? quota(s.voci[voce.id] || 0, st) : null;
+          }),
+        });
       }
     }
   }
-
-  righe.push({
-    livello: 0, tipo: 'totale', id: '_cd', nome: 'Totale costi diretti',
-    ...conDelta(perColonna((col) => quota(col.cd, col))),
-  });
-  if (riferimento === 'ricavo') {
-    righe.push({
-      livello: 0, tipo: 'margine', id: '_mdc', nome: 'Margine di contribuzione',
-      ...conDelta(perColonna((col) => quota(col.mdc, col))),
-    });
-  }
   return { riferimento, righe };
-}
-
-const LEVE = {
-  costi: 'Costi',
-  ricavi: 'Ricavi',
-};
-
-/**
- * Calcolo inverso: dato il margine che si vuole raggiungere, quale scostamento serve.
- *
- * Il margine di riferimento è quello industriale, che coincide con il margine di
- * contribuzione quando costi di struttura e riserva sono a zero:
- *   MI = R - CD(1+k),  con k = struttura + riserva
- *   MI/R = m  =>  CD(1+k) = R(1-m)
- *
- * Agendo sui costi, il ricavo resta quello simulato e si cerca CD; agendo sui ricavi,
- * restano i costi e si cerca R. Il risultato è uno scostamento percentuale complessivo,
- * cioè la stessa leva che il PM muove a mano: resta visibile, modificabile e annullabile.
- */
-function scostamentoPerMargine(sim, marginePct, leva) {
-  const m = frazione(marginePct);
-  const p = sim.parametri || {};
-  const k = frazione(p.sgPct) + frazione(p.ctgPct);
-  const attuale = calcolaColonna(sim, 'simulato');
-
-  const senza = (campo) => calcolaColonna(
-    { ...sim, delta: { ...(sim.delta || {}), [campo]: 0 } },
-    'simulato',
-  );
-
-  if (m >= 1) {
-    return { possibile: false, motivo: 'Un margine del 100% o più non è raggiungibile.' };
-  }
-
-  if (leva === 'costi') {
-    if (!(attuale.ricavo > 0)) {
-      return { possibile: false, motivo: 'Serve un ricavo maggiore di zero per calcolare i costi ammessi.' };
-    }
-    const base = senza('globale').cd;
-    if (!(base > 0)) {
-      return { possibile: false, motivo: 'Serve almeno un costo inserito su cui agire.' };
-    }
-    const richiesto = (attuale.ricavo * (1 - m)) / (1 + k);
-    return {
-      possibile: true,
-      leva: 'costi',
-      deltaPct: (richiesto / base - 1) * 100,
-      attuale: attuale.cd,
-      richiesto,
-      variazione: richiesto - attuale.cd,
-      negativo: richiesto < 0,
-    };
-  }
-
-  if (!(attuale.cd > 0)) {
-    return { possibile: false, motivo: 'Serve almeno un costo inserito per calcolare il ricavo necessario.' };
-  }
-  const base = senza('ricavo').ricavo;
-  if (!(base > 0)) {
-    return { possibile: false, motivo: 'Serve un ricavo di partenza maggiore di zero su cui agire.' };
-  }
-  const richiesto = (attuale.cd * (1 + k)) / (1 - m);
-  return {
-    possibile: true,
-    leva: 'ricavi',
-    deltaPct: (richiesto / base - 1) * 100,
-    attuale: attuale.ricavo,
-    richiesto,
-    variazione: richiesto - attuale.ricavo,
-    negativo: false,
-  };
-}
-
-/**
- * Costo della voce nella colonna simulata con tutti gli scostamenti applicati tranne
- * quello della voce stessa. È il punto di partenza per fare il percorso inverso: se
- * l'utente scrive direttamente quanto vuole che costi quella voce, da qui si ricava lo
- * scostamento che produce quel numero.
- */
-function costoVoceSenzaScostamentoProprio(sim, linea, voce) {
-  const d = sim.delta || {};
-  const f = (1 + frazione(d.globale))
-    * (1 + frazione((d.linea || {})[linea.id]))
-    * (1 + frazione((d.catLinea || {})[linea.id + '|' + voce.cat]));
-  return costoVoce(voce, baseSimulato(sim), sim.tariffe) * f;
-}
-
-/** Ricavo della linea nella colonna simulata senza lo scostamento proprio della linea. */
-function ricavoSenzaScostamentoProprio(sim, linea) {
-  const d = sim.delta || {};
-  return num((linea.ricavo || {})[baseSimulato(sim)]) * (1 + frazione(d.ricavo));
-}
-
-/**
- * Scostamento da scrivere perché una grandezza assuma il valore voluto.
- * Restituisce null quando il valore di partenza è zero: da zero nessun fattore
- * moltiplicativo porta a un numero diverso da zero, e fingere il contrario darebbe
- * un campo che accetta quello che scrivi e non lo rispetta.
- */
-function scostamentoPerValore(partenza, voluto) {
-  if (!(Math.abs(partenza) > 1e-9)) return null;
-  return (num(voluto) / partenza - 1) * 100;
 }
 
 
 // ---- modello.mjs ----
 // Modello dati della simulazione: valori di default, voci suggerite, serializzazione.
-// Separato dal motore di calcolo perché qui vivono le convenzioni aziendali, che cambiano,
+// Separato dal motore perché qui vivono le convenzioni aziendali, che cambiano,
 // mentre le formule no.
 
-const VERSIONE_SCHEMA = 1;
+
+const VERSIONE_SCHEMA = 2;
 
 let contatore = 0;
 function id(prefisso = 'x') {
   contatore += 1;
   return prefisso + '-' + Date.now().toString(36) + '-' + contatore.toString(36);
 }
-
-/** Tipi di manodopera con tariffa oraria centralizzata. Le tariffe partono vuote di proposito. */
-const TARIFFE_DEFAULT = [
-  'Produzione e cablaggio',
-  'Ingegneria elettrica',
-  'Ingegneria software',
-  'Montaggio in cantiere',
-  'Messa in servizio',
-  'Project management',
-];
 
 /** Voci suggerite nel menu "aggiungi", per categoria. L'elenco è un aiuto, non un vincolo. */
 const SUGGERIMENTI = {
@@ -1033,7 +863,10 @@ const SUGGERIMENTI = {
     'Componenti elettrici', 'Carpenteria e quadro', 'Cavi', 'Minuteria',
     'Strumentazione', 'Materiale di installazione', 'Altro materiale',
   ],
-  manodopera: TARIFFE_DEFAULT,
+  manodopera: [
+    'Produzione e cablaggio', 'Ingegneria elettrica', 'Ingegneria software',
+    'Montaggio in cantiere', 'Messa in servizio', 'Project management',
+  ],
   altri: [
     'Trasferte e viaggi', 'Vitto e alloggio', 'Noleggi', 'Trasporti e logistica',
     'Subappalti e terzisti', 'Collaudi e certificazioni', 'Attrezzature di cantiere',
@@ -1041,7 +874,7 @@ const SUGGERIMENTI = {
   ],
 };
 
-const NOMI_LINEE = ['Quadri elettrici', 'Installazione cantiere', 'Commissioning'];
+const NOMI_SERVIZI = ['Quadri elettrici', 'Installazione cantiere', 'Commissioning'];
 
 const ETICHETTA_CAT = {
   materiale: 'Materiale',
@@ -1049,47 +882,28 @@ const ETICHETTA_CAT = {
   altri: 'Altri costi diretti',
 };
 
-function nuovaVoce(cat, nome, tariffe) {
-  const v = {
-    id: id('v'),
-    cat,
-    nome,
-    preventivo: { q: 0, sconto: 0 },
-    kom: { q: 0, sconto: 0 },
-  };
-  if (cat === 'manodopera') {
-    const t = (tariffe || []).find((x) => x.nome === nome);
-    v.tariffaId = t ? t.id : null;
-    v.modo = t ? 'ore' : 'importo';
-  }
-  return v;
+const riduzioniVuote = () => ({ trattativa: 0, kom: 0, simulato: 0 });
+
+function nuovaVoce(cat, nome) {
+  return { id: id('v'), cat, nome, base: 0, rid: riduzioniVuote() };
 }
 
-function nuovaTariffa(nome, eurOra = 0) {
-  return { id: id('t'), nome, eurOra };
+function nuovoServizio(nome) {
+  return { id: id('s'), nome, ricavo: { base: 0, rid: riduzioniVuote() }, voci: [] };
 }
 
-function nuovaLinea(nome) {
-  return { id: id('l'), nome, ricavo: { preventivo: 0, kom: 0 }, voci: [] };
+/** Servizio con una voce per categoria: la forma minima con cui si comincia. */
+function servizioStandard(nome) {
+  const s = nuovoServizio(nome);
+  s.voci = ['materiale', 'manodopera', 'altri'].map((c) => nuovaVoce(c, ETICHETTA_CAT[c]));
+  return s;
 }
 
-/**
- * Struttura minima di una linea: una sola voce per categoria. È il livello a cui si parte,
- * dove per compilare una commessa bastano nove numeri in tutto. Il dettaglio per marca e
- * per tipo di manodopera si aggiunge dopo, se serve.
- */
-function lineaStandard(nome, tariffe) {
-  const l = nuovaLinea(nome);
-  l.voci = ['materiale', 'manodopera', 'altri'].map((c) => nuovaVoce(c, ETICHETTA_CAT[c], tariffe));
-  return l;
-}
-
-function nomiLineeStandard() {
-  return NOMI_LINEE.slice();
+function nomiServiziStandard() {
+  return NOMI_SERVIZI.slice();
 }
 
 function nuovaSimulazione() {
-  const tariffe = TARIFFE_DEFAULT.map((n) => nuovaTariffa(n, 0));
   return {
     versione: VERSIONE_SCHEMA,
     meta: {
@@ -1100,44 +914,87 @@ function nuovaSimulazione() {
       autore: '',
       note: '',
     },
-    parametri: { sgPct: 0, ctgPct: 0, targetPct: 0, validitaTariffe: '' },
-    tariffe,
-    linee: NOMI_LINEE.map((n) => lineaStandard(n, tariffe)),
-    delta: { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: {}, voce: {} },
+    parametri: { riservaPct: 0, targetPct: 0 },
+    servizi: [servizioStandard('Quadri elettrici')],
   };
 }
 
-/** Normalizza una simulazione caricata da file, tollerando campi mancanti. */
+function normalizzaRid(raw) {
+  const r = riduzioniVuote();
+  for (const k of RIDUZIONI) {
+    const v = raw && raw[k];
+    r[k] = Number.isFinite(Number(v)) ? Number(v) : 0;
+  }
+  return r;
+}
+
+/**
+ * Converte una voce del vecchio modello, che aveva due colonne di valori assoluti e uno
+ * scostamento simulato, nel modello a stadi. Il preventivo diventa la base, la differenza
+ * fino al KOM diventa la riduzione di quello stadio, e lo scostamento simulato la terza.
+ * Nessun numero cambia: cambia solo il modo in cui è espresso.
+ */
+function migraVoce(v, deltaVoce) {
+  const netto = (c) => {
+    const d = v[c] || {};
+    const q = Number(d.q) || 0;
+    const sconto = Number(d.sconto) || 0;
+    if (v.cat === 'manodopera' && v.modo === 'ore') return 0; // le tariffe non esistono più
+    return q * (1 - sconto / 100);
+  };
+  const prev = netto('preventivo');
+  const kom = netto('kom');
+  const base = prev || kom;
+  const rid = riduzioniVuote();
+  if (base > 0 && kom > 0) rid.kom = (1 - kom / base) * 100;
+  if (Number.isFinite(Number(deltaVoce))) rid.simulato = -Number(deltaVoce);
+  return { id: v.id || id('v'), cat: v.cat || 'materiale', nome: v.nome || 'Voce', base, rid };
+}
+
+/** Normalizza una simulazione caricata da file, migrando il modello precedente. */
 function normalizza(raw) {
   const base = nuovaSimulazione();
   if (!raw || typeof raw !== 'object') return base;
+
+  const parametriGrezzi = raw.parametri || {};
   const sim = {
     versione: VERSIONE_SCHEMA,
     meta: { ...base.meta, ...(raw.meta || {}) },
-    parametri: { ...base.parametri, ...(raw.parametri || {}) },
-    tariffe: Array.isArray(raw.tariffe) && raw.tariffe.length ? raw.tariffe : base.tariffe,
-    linee: Array.isArray(raw.linee) ? raw.linee : base.linee,
-    delta: { ...base.delta, ...(raw.delta || {}) },
+    parametri: {
+      riservaPct: Number(parametriGrezzi.riservaPct ?? parametriGrezzi.ctgPct) || 0,
+      targetPct: Number(parametriGrezzi.targetPct) || 0,
+    },
+    servizi: [],
   };
-  sim.linee = sim.linee.map((l) => ({
-    id: l.id || id('l'),
-    nome: l.nome || 'Servizio',
-    ricavo: { preventivo: 0, kom: 0, ...(l.ricavo || {}) },
-    voci: (l.voci || []).map((v) => {
-      const voce = {
-        id: v.id || id('v'),
-        cat: v.cat || 'materiale',
-        nome: v.nome || 'Voce',
-        tariffaId: v.tariffaId ?? null,
-        preventivo: { q: 0, sconto: 0, ...(v.preventivo || {}) },
-        kom: { q: 0, sconto: 0, ...(v.kom || {}) },
-      };
-      if (voce.cat === 'manodopera') {
-        voce.modo = v.modo === 'ore' || v.modo === 'importo' ? v.modo : (voce.tariffaId ? 'ore' : 'importo');
-      }
-      return voce;
-    }),
-  }));
+
+  const sorgente = Array.isArray(raw.servizi) ? raw.servizi
+    : Array.isArray(raw.linee) ? raw.linee
+      : base.servizi;
+  const delta = raw.delta || {};
+
+  sim.servizi = sorgente.map((s) => {
+    const voci = (s.voci || []).map((v) => (
+      v.rid || typeof v.base === 'number'
+        ? { id: v.id || id('v'), cat: v.cat || 'materiale', nome: v.nome || 'Voce', base: Number(v.base) || 0, rid: normalizzaRid(v.rid) }
+        : migraVoce(v, (delta.voce || {})[v.id])
+    ));
+
+    let ricavo;
+    if (s.ricavo && typeof s.ricavo.base === 'number') {
+      ricavo = { base: Number(s.ricavo.base) || 0, rid: normalizzaRid(s.ricavo.rid) };
+    } else {
+      const prev = Number((s.ricavo || {}).preventivo) || 0;
+      const kom = Number((s.ricavo || {}).kom) || 0;
+      const b = prev || kom;
+      const rid = riduzioniVuote();
+      if (b > 0 && kom > 0) rid.kom = (1 - kom / b) * 100;
+      ricavo = { base: b, rid };
+    }
+
+    return { id: s.id || id('s'), nome: s.nome || 'Servizio', ricavo, voci };
+  });
+
+  if (!sim.servizi.length) sim.servizi = base.servizi;
   return sim;
 }
 
@@ -1153,54 +1010,21 @@ function nomeFile(sim) {
 
 // --- commessa di esempio -------------------------------------------------------------
 
-const ESEMPIO = {
-  'Quadri elettrici': {
-    ricavo: [240000, 232000],
-    voci: [
-      ['materiale', 'Componenti elettrici', 180000, 40, 180000, 37],
-      ['materiale', 'Carpenteria e quadro', 35000, 30, 35000, 30],
-      ['materiale', 'Cavi e minuteria', 14000, 25, 14000, 25],
-      ['manodopera', 'Produzione e cablaggio', 520, 0, 560, 0],
-      ['manodopera', 'Ingegneria elettrica', 200, 0, 210, 0],
-      ['manodopera', 'Ingegneria software', 140, 0, 160, 0],
-      ['altri', 'Trasporti e logistica', 3200, 0, 3500, 0],
-    ],
-  },
-  'Installazione cantiere': {
-    ricavo: [140000, 136000],
-    voci: [
-      ['materiale', 'Materiale di installazione', 28000, 20, 29000, 20],
-      ['manodopera', 'Montaggio in cantiere', 900, 0, 980, 0],
-      ['altri', 'Trasferte e viaggi', 12000, 0, 14000, 0],
-      ['altri', 'Vitto e alloggio', 9500, 0, 10500, 0],
-      ['altri', 'Noleggi', 6500, 0, 7000, 0],
-      ['altri', 'Subappalti e terzisti', 18000, 0, 21000, 0],
-    ],
-  },
-  Commissioning: {
-    ricavo: [86000, 84000],
-    voci: [
-      ['manodopera', 'Messa in servizio', 620, 0, 680, 0],
-      ['manodopera', 'Ingegneria software', 220, 0, 240, 0],
-      ['altri', 'Trasferte e viaggi', 13500, 0, 14500, 0],
-      ['altri', 'Vitto e alloggio', 10500, 0, 11000, 0],
-    ],
-  },
-};
-
-const TARIFFE_ESEMPIO = {
-  'Produzione e cablaggio': 38,
-  'Ingegneria elettrica': 52,
-  'Ingegneria software': 58,
-  'Montaggio in cantiere': 41,
-  'Messa in servizio': 46,
-  'Project management': 62,
-};
+// [categoria, nome, base, % trattativa, % kom, % simulato]
+const ESEMPIO_VOCI = [
+  ['materiale', 'Componenti elettrici', 108000, 2, 0, 5],
+  ['materiale', 'Carpenteria e quadro', 24500, 0, 0, 3],
+  ['materiale', 'Cavi e minuteria', 10500, 0, 0, 0],
+  ['manodopera', 'Produzione e cablaggio', 19760, 0, 0, 6],
+  ['manodopera', 'Ingegneria elettrica', 10400, 0, 0, 0],
+  ['manodopera', 'Ingegneria software', 8120, 0, 0, 0],
+  ['altri', 'Trasporti e logistica', 3200, 0, 0, 0],
+];
 
 /**
- * Commessa di esempio, dichiaratamente fittizia. Serve perché il tool si apra in uno stato
- * operativo invece che su una maschera vuota. I valori sono plausibili per una commessa di
- * automazione industriale ma non sono dati reali.
+ * Commessa di esempio, dichiaratamente fittizia. Serve perché lo strumento si apra in uno
+ * stato operativo invece che su una maschera vuota. I valori sono plausibili per una
+ * commessa di automazione industriale ma non sono dati reali.
  */
 function simulazioneEsempio() {
   const s = nuovaSimulazione();
@@ -1212,28 +1036,26 @@ function simulazioneEsempio() {
     autore: '',
     note: '',
   };
-  s.parametri = { sgPct: 9, ctgPct: 2, targetPct: 12, validitaTariffe: '' };
-  s.tariffe.forEach((t) => { t.eurOra = TARIFFE_ESEMPIO[t.nome] ?? 0; });
+  s.parametri = { riservaPct: 2, targetPct: 12 };
 
-  s.linee = NOMI_LINEE.map((nome) => {
-    const def = ESEMPIO[nome];
-    const l = nuovaLinea(nome);
-    l.ricavo = { preventivo: def.ricavo[0], kom: def.ricavo[1] };
-    l.voci = def.voci.map(([cat, n, pq, ps, kq, ks]) => {
-      const v = nuovaVoce(cat, n, s.tariffe);
-      v.preventivo = { q: pq, sconto: ps };
-      v.kom = { q: kq, sconto: ks };
-      return v;
-    });
-    return l;
+  const servizio = nuovoServizio('Quadri elettrici');
+  servizio.ricavo = { base: 240000, rid: { trattativa: 3.333, kom: 0, simulato: 0 } };
+  servizio.voci = ESEMPIO_VOCI.map(([cat, nome, valore, t, k, si]) => {
+    const v = nuovaVoce(cat, nome);
+    v.base = valore;
+    v.rid = { trattativa: t, kom: k, simulato: si };
+    return v;
   });
+  s.servizi = [servizio];
   return s;
 }
 
-/** Riconosce l'esempio, per poterlo segnalare senza salvarne un flag nel file. */
+/** Riconosce l'esempio, per poterlo segnalare senza salvarne un contrassegno nel file. */
 function eEsempio(sim) {
   return String(sim?.meta?.descrizione || '').startsWith('ESEMPIO');
 }
+
+void STADI; void valoreAStadio; void indiceStadio;
 
 
 // ---- archivio.mjs ----
@@ -1444,54 +1266,21 @@ function apriFile() {
 
 // ---- app.mjs ----
 // Interfaccia del simulatore. Tutto il calcolo sta in calcolo.mjs: qui si disegna e si
-// raccoglie input. Il re-render completo avviene solo quando cambia la struttura
-// (righe, linee, scheda); digitare un numero aggiorna soltanto i valori derivati, per non
-// perdere il fuoco dal campo in cui si sta scrivendo.
+// raccoglie input. Una pagina sola: dati, cruscotto e grafici insieme.
+//
+// Il re-render completo avviene solo quando cambia la struttura (righe, servizi, scheda);
+// digitare un numero aggiorna soltanto i valori derivati, per non perdere il fuoco dal
+// campo in cui si sta scrivendo.
 
 
 
 
 let sim = nuovaSimulazione();
-// Tre livelli di dettaglio. Si parte dal più semplice: nove numeri e un margine.
-// Il dettaglio si aggiunge quando serve, con pulsanti espliciti, non tutto subito.
-const LIVELLI = [
-  ['base', 'Base', 'Ricavo, materiale e manodopera per servizio. Nove numeri in tutto.'],
-  ['intermedio', 'Intermedio', 'Aggiunge la colonna Preventivo, gli altri costi diretti e le spese generali.'],
-  ['completo', 'Completo', 'Righe per marca fornitore e tipo di manodopera, con tariffe orarie.'],
-];
-let livello = 'base';
-
-const colonneInput = () => (livello === 'base' ? ['kom'] : ['preventivo', 'kom']);
-
-/**
- * Categorie mostrate per una linea. Al livello Base gli altri costi diretti restano fuori,
- * ma solo finché sono a zero: nascondere un costo che sta abbassando il margine a schermo
- * significa far leggere un numero senza mostrarne la causa.
- */
-const categorieVisibili = (linea) => {
-  if (livello !== 'base') return CATEGORIE;
-  const viste = ['materiale', 'manodopera'];
-  const valorizzata = ((linea && linea.voci) || []).some((v) => v.cat === 'altri'
-    && (Number(v.preventivo && v.preventivo.q) || Number(v.kom && v.kom.q)));
-  if (valorizzata) viste.push('altri');
-  return viste;
-};
-const etichettaLivello = (k) => (LIVELLI.find((x) => x[0] === k) || [])[1] || k;
-
-/**
- * I costi di struttura e la riserva per imprevisti esistono solo se qualcuno li usa.
- * Quando sono entrambi a zero il margine industriale coincide con quello di contribuzione,
- * e mostrare due righe identiche con due nomi diversi confonde e basta: spariscono.
- */
-const usaStruttura = () => Number(sim.parametri.sgPct || 0) !== 0 || Number(sim.parametri.ctgPct || 0) !== 0;
-let scheda = 'dati';
-let riferimentoIncidenza = 'cd';
-let levaMargine = 'costi';
-let livelloSensitivita = 'voce';
-let margineVoluto = null;
+let scheda = 'cruscotto';
 let elencoArchivio = [];
 let messaggio = null;
 let ripristino = null;
+let margineVoluto = null;
 
 // --- utilità -----------------------------------------------------------------------
 
@@ -1515,15 +1304,21 @@ function h(tag, attrs = {}, ...figli) {
 }
 
 const nfEuro = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
-const nfEuro2 = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
+const nfNum = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
 
 const euro = (n) => nfEuro.format(Number.isFinite(n) ? n : 0);
-const numero = (n) => nfEuro2.format(Number.isFinite(n) ? n : 0);
+const numero = (n) => nfNum.format(Number.isFinite(n) ? n : 0);
 const perc = (f) => (f === null || f === undefined || !Number.isFinite(f) ? 'n.d.' : (f * 100).toFixed(1).replace('.', ',') + '%');
 const segno = (v, s) => (v > 0 ? '+' : '') + s;
 const euroSegnato = (n) => segno(n, euro(n));
 const punti = (v) => (v === null || !Number.isFinite(v) ? 'n.d.' : segno(v, v.toFixed(1).replace('.', ',')) + ' p.p.');
-const percRel = (v) => (v === null || !Number.isFinite(v) ? 'n.d.' : segno(v, v.toFixed(1).replace('.', ',')) + '%');
+
+/** Percentuale come la si scrive in un campo: al massimo due decimali, senza zeri inutili. */
+function testoPct(v) {
+  const n = Number(v) || 0;
+  if (n === 0) return '';
+  return (Math.round(n * 100) / 100).toString().replace('.', ',');
+}
 
 /** Accetta 1234,56 oppure 1.234,56 oppure 1234.56 senza indovinare a caso. */
 function leggiNumero(s) {
@@ -1578,18 +1373,11 @@ function disegnaMessaggio() {
   c.hidden = false;
   c.appendChild(h('span', { testo: messaggio.testo }));
   if (messaggio.azione) {
-    c.appendChild(h('button', {
-      style: 'white-space:nowrap',
-      testo: messaggio.azione.testo,
-      onclick: messaggio.azione.onclick,
-    }));
+    c.appendChild(h('button', { style: 'white-space:nowrap', testo: messaggio.azione.testo, onclick: messaggio.azione.onclick }));
   }
 }
 
-/**
- * Esegue un'azione distruttiva conservando lo stato precedente, e offre di annullarla.
- * Cancellare una linea o una voce senza via di ritorno costringe a riscrivere tutto a mano.
- */
+/** Esegue un'azione distruttiva conservando lo stato precedente, e offre di annullarla. */
 function conAnnulla(descrizione, azione) {
   const prima = JSON.parse(JSON.stringify(sim));
   azione();
@@ -1607,7 +1395,109 @@ function conAnnulla(descrizione, azione) {
   });
 }
 
-// --- campi ------------------------------------------------------------------------
+// --- valori derivati e spiegazioni ---------------------------------------------------
+
+const spiegazioni = new Map();
+
+/**
+ * Regola unica del colore: verde quando il margine ci guadagna, rosso quando ci perde.
+ * Su un costo vuol dire scendere, su ricavo e margine salire. Il colore non è mai l'unico
+ * segnale: accanto c'è sempre il segno, e sui valori assoluti una freccia.
+ */
+function versoScostamento(valore, partenza, piuEMeglio) {
+  if (!(Math.abs(partenza) > 1e-9)) return { nullo: true };
+  const scarto = valore - partenza;
+  if (Math.abs(scarto) < 0.005) return { nullo: true, scarto: 0 };
+  const bene = piuEMeglio ? scarto > 0 : scarto < 0;
+  return { nullo: false, scarto, bene, classe: bene ? 'v-buono' : 'v-critico' };
+}
+
+function scrivi(sel, testo, classe, spiegazione, grezzo, comePct) {
+  if (spiegazione !== undefined && spiegazione !== null) spiegazioni.set(sel, spiegazione);
+  for (const n of $$(`[data-out="${sel}"]`)) {
+    if (n.tagName === 'INPUT') {
+      if (document.activeElement !== n && grezzo !== undefined) {
+        n.value = comePct ? testoPct(grezzo) : (grezzo ? numero(grezzo) : '');
+      }
+      n.classList.remove('v-buono', 'v-critico');
+      if (classe) n.classList.add(classe);
+      const sp = spiegazioni.get(sel);
+      if (sp) n.setAttribute('title', sp);
+      continue;
+    }
+    n.textContent = testo;
+    n.classList.remove('v-buono', 'v-critico');
+    if (classe) n.classList.add(classe);
+    const sp = spiegazioni.get(sel);
+    if (sp) {
+      n.classList.add('spiegabile');
+      n.setAttribute('title', sp);
+      n.setAttribute('tabindex', '0');
+      n.setAttribute('role', 'button');
+    }
+  }
+}
+
+function segnalaDirezione(chiave, verso) {
+  for (const n of $$(`[data-out="${chiave}"]`)) {
+    const cella = n.closest ? n.closest('td') : null;
+    const freccia = cella && cella.querySelector('.direzione');
+    if (!freccia) continue;
+    if (verso.nullo) {
+      freccia.textContent = '';
+      freccia.className = 'direzione';
+      freccia.removeAttribute('title');
+      continue;
+    }
+    freccia.textContent = verso.scarto > 0 ? '▲' : '▼';
+    freccia.className = 'direzione ' + verso.classe;
+    freccia.setAttribute('title', `${verso.scarto > 0 ? 'più' : 'meno'} ${euro(Math.abs(verso.scarto))} rispetto allo stadio precedente`);
+  }
+}
+
+function chiudiSpiegazione() {
+  const p = $('#spiegazione');
+  if (p) { p.hidden = true; p.textContent = ''; }
+  for (const n of $$('.spiegabile.aperta')) n.classList.remove('aperta');
+}
+
+function mostraSpiegazione(cella) {
+  const chiave = cella.getAttribute('data-out');
+  const testo = spiegazioni.get(chiave);
+  if (!testo) return;
+  const p = $('#spiegazione');
+  if (!p) return;
+  chiudiSpiegazione();
+  cella.classList.add('aperta');
+  const et = cella.getAttribute('data-et') || '';
+  p.textContent = '';
+  p.appendChild(h('div', { class: 'titolo-spiega' },
+    h('span', { testo: (et ? et + ' · ' : '') + cella.textContent.trim() }),
+    h('button', { class: 'muto', 'aria-label': 'Chiudi', testo: '×', onclick: chiudiSpiegazione })));
+  p.appendChild(h('div', { class: 'corpo-spiega', testo }));
+  p.hidden = false;
+}
+
+function collegaSpiegazioni() {
+  document.addEventListener('click', (e) => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+    if (t.closest('#spiegazione')) return;
+    const cella = t.closest('[data-out].spiegabile');
+    if (cella) { e.preventDefault(); mostraSpiegazione(cella); return; }
+    chiudiSpiegazione();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') chiudiSpiegazione();
+    if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.classList
+        && e.target.classList.contains('spiegabile')) {
+      e.preventDefault();
+      mostraSpiegazione(e.target);
+    }
+  });
+}
+
+// --- campi -------------------------------------------------------------------------
 
 function campoTesto(etichetta, percorso, valore, extra = {}) {
   return h('label', { class: 'campo' },
@@ -1623,598 +1513,265 @@ function campoNumero(etichetta, percorso, valore, extra = {}) {
   return h('label', { class: 'campo' },
     h('span', { testo: etichetta }),
     h('input', {
-      type: 'text', inputmode: 'decimal', class: 'num', value: valore ? String(valore).replace('.', ',') : '',
+      type: 'text', inputmode: 'decimal', class: 'num',
+      value: valore ? String(valore).replace('.', ',') : '',
       id: 'c-' + percorso.replace(/[^\w]/g, '-'),
       ...extra,
       oninput: (e) => { imposta(percorso, leggiNumero(e.target.value)); aggiornaDerivati(); },
     }));
 }
 
-function inputNumero(percorso, valore, extra = {}) {
-  return h('input', {
-    type: 'text', inputmode: 'decimal', class: 'num',
-    value: valore ? String(valore).replace('.', ',') : '',
-    ...extra,
-    oninput: (e) => { imposta(percorso, leggiNumero(e.target.value)); aggiornaDerivati(); },
-  });
+// --- tabella del servizio ------------------------------------------------------------
+
+const L_VOCE = 210;
+const L_VALORE = 132;
+const L_PCT = 66;
+const L_AZIONE = 40;
+
+function larghezzaTabella() {
+  return L_VOCE + L_VALORE * STADI.length + L_PCT * RIDUZIONI.length + L_AZIONE;
 }
 
-// --- scheda dati -------------------------------------------------------------------
-
-function pannelloCommessa() {
-  return h('section', { class: 'pannello' },
-    h('h2', { testo: 'Commessa' }),
-    h('div', { class: 'corpo' },
-      h('div', { class: 'campi' },
-        campoTesto('Codice commessa', 'meta.codice', sim.meta.codice, { placeholder: 'es. C-2026-014' }),
-        campoTesto('Cliente', 'meta.cliente', sim.meta.cliente),
-        campoTesto('Descrizione', 'meta.descrizione', sim.meta.descrizione),
-        campoTesto('Data', 'meta.data', sim.meta.data, { type: 'date' }),
-        campoTesto('Compilata da', 'meta.autore', sim.meta.autore))));
-}
-
-
-function pulsanteEspandi(aLivello, testo) {
-  return h('button', {
-    class: 'espandi', testo: testo,
-    onclick: () => { livello = aLivello; disegna(); avvisa('Livello ' + etichettaLivello(aLivello) + '.'); },
-  });
-}
-
-function tabellaTariffe() {
-  return h('div', {},
-    h('div', { class: 'tabellone' },
-      h('table', { class: 'tab-dati' },
-        h('thead', {}, h('tr', {},
-          h('th', { testo: 'Tipo di manodopera' }),
-          h('th', { class: 'n', testo: 'Costo orario \u20ac/h' }),
-          h('th', { class: 'azione-riga' }))),
-        h('tbody', {}, ...sim.tariffe.map((tr, i) => h('tr', {},
-          h('td', { 'data-et': 'Tipo' }, h('input', {
-            type: 'text', value: tr.nome, 'aria-label': 'Nome del tipo di manodopera',
-            oninput: (e) => { tr.nome = e.target.value; },
-          })),
-          h('td', { class: 'n', 'data-et': '\u20ac/h', style: 'width:130px' },
-            inputNumero(`tariffe.${i}.eurOra`, tr.eurOra, { placeholder: 'da impostare' })),
-          h('td', { class: 'azione-riga' }, h('button', {
-            class: 'muto', title: 'Rimuovi tariffa', 'aria-label': 'Rimuovi tariffa', testo: '\u00d7',
-            onclick: () => conAnnulla(`Tariffa "${tr.nome}" rimossa.`, () => sim.tariffe.splice(i, 1)),
-          }))))))),
-    h('button', {
-      style: 'margin-top:8px', testo: '+ tipo di manodopera',
-      onclick: () => { sim.tariffe.push(nuovaTariffa('Nuovo tipo', 0)); disegna(); },
-    }),
-    h('p', { class: 'nota', testo: 'Costo orario aziendale pieno, non prezzo di vendita. Finché resta a zero, il margine delle righe in ore non ha significato.' }));
-}
-
-
-function campoConEuro(etichetta, percorso, valore, chiaveEuro, aiuto) {
-  return h('div', { class: 'campo-spiegato' },
-    campoNumero(etichetta, percorso, valore),
-    h('div', { class: 'valore-vivo' },
-      h('span', { testo: 'sulla colonna simulata: ' }),
-      h('b', { 'data-out': chiaveEuro, testo: '\u2014' })),
-    h('p', { class: 'nota', style: 'margin-top:4px', testo: aiuto }));
-}
-
-function pannelloParametri() {
-  const struttura = livello !== 'base';
-  const campi = [campoNumero('Margine obiettivo %', 'parametri.targetPct', sim.parametri.targetPct)];
-
-  return h('section', { class: 'pannello' },
-    h('h2', { testo: livello === 'completo' ? 'Parametri e tariffe orarie' : 'Parametri' }),
-    h('div', { class: 'corpo' },
-      h('div', { class: 'campi' }, ...campi),
-      h('p', { class: 'nota', style: 'margin-top:4px', testo: 'Soglia sotto la quale la commessa non deve scendere. Colora il semaforo in basso e determina la riserva mostrata nel Confronto.' }),
-
-      struttura
-        ? h('div', { class: 'blocco-struttura' },
-          h('h3', { class: 'sotto-titolo', testo: 'Costi che non stanno dentro la commessa' }),
-          h('p', { class: 'nota', style: 'margin-top:0' }, 'Due percentuali applicate ai costi diretti. Se non le usate, lasciatele a zero: spariscono da tutte le tabelle e il margine industriale torna a coincidere con quello di contribuzione.'),
-          h('div', { class: 'campi' },
-            campoConEuro(
-              'Costi di struttura sulla commessa %',
-              'parametri.sgPct', sim.parametri.sgPct, 'tot:simulato:speseGenerali:euro',
-              'Quota dei costi aziendali che non sono imputati a nessuna commessa \u2014 direzione, amministrazione, acquisti, immobili, mezzi \u2014 attribuita a questa commessa in proporzione ai suoi costi diretti. La percentuale la d\u00e0 il controllo di gestione, non si inventa.'),
-            campoConEuro(
-              'Riserva per imprevisti %',
-              'parametri.ctgPct', sim.parametri.ctgPct, 'tot:simulato:contingency:euro',
-              'Margine di sicurezza tenuto sui costi per rischi non ancora emersi: varianti, rilavorazioni, fermi. Non \u00e8 un costo gi\u00e0 sostenuto, \u00e8 un accantonamento.')))
-        : h('p', { class: 'nota' },
-          'A questo livello non ci sono costi di struttura n\u00e9 riserva per imprevisti: il margine \u00e8 semplicemente ricavo meno costi diretti. ',
-          pulsanteEspandi('intermedio', 'Aggiungili')),
-
-      livello === 'completo' ? h('div', { style: 'margin-top:14px' },
-        h('h3', { class: 'sotto-titolo', testo: 'Tariffe orarie' }),
-        tabellaTariffe(),
-        h('div', { class: 'campi', style: 'margin-top:8px' },
-          campoTesto('Tariffe valide dal', 'parametri.validitaTariffe', sim.parametri.validitaTariffe, { type: 'date' }))) : null,
-
-      livello === 'intermedio'
-        ? h('p', { class: 'nota' }, 'Le tariffe orarie servono solo se inserisci la manodopera in ore. ',
-          pulsanteEspandi('completo', 'Vai al dettaglio per voce'))
-        : null));
-}
-
-
-
-/**
- * Larghezze di colonna deterministiche. Senza, ogni tabella si dimensiona sul proprio
- * contenuto e le colonne di due linee di servizio non si allineano fra loro; dentro la
- * stessa colonna, una riga con lo sconto e una senza finiscono con l'input di larghezza
- * diversa e il bordo destro sfalsato.
- */
-const L_VOCE = 300;
-const L_VALORE = 200;
-const L_AZIONE = 48;
-
-function colonneTabella(nValori, conAzione) {
-  // Percentuali ricavate dalle larghezze di riferimento: con le percentuali la tabella
-  // si restringe insieme alla finestra, con i pixel resterebbe rigida e finirebbe per
-  // uscire dallo schermo.
-  const totale = larghezzaTabella(nValori, conAzione);
+function colonneTabella() {
+  const totale = larghezzaTabella();
   const q = (px) => ((px / totale) * 100).toFixed(3) + '%';
-  return h('colgroup', {},
-    h('col', { style: `width:${q(L_VOCE)}` }),
-    ...Array.from({ length: nValori + 1 }, () => h('col', { style: `width:${q(L_VALORE)}` })),
-    conAzione ? h('col', { style: `width:${q(L_AZIONE)}` }) : null);
-}
-
-/** Oltre questa larghezza la tabella smette di allargarsi: le colonne non hanno nulla da
- *  farci con lo spazio in più, e il numero finirebbe lontano dalla voce a cui si riferisce. */
-function larghezzaTabella(nValori, conAzione) {
-  return L_VOCE + L_VALORE * (nValori + 1) + (conAzione ? L_AZIONE : 0);
-}
-
-/**
- * Ogni cella numerica ha la stessa struttura: un campo principale che occupa lo spazio
- * disponibile e uno slot accessorio di larghezza fissa, presente anche quando è vuoto.
- * È lo slot vuoto a tenere allineate fra loro righe che hanno contenuti diversi.
- */
-/**
- * Cella della colonna Simulato, scrivibile. È qui che si simula: si scrive quanto si vuole
- * che quella voce costi e lo strumento ricava da sé lo scostamento che produce quel
- * numero. Prima questa colonna era di sola lettura e l'unico modo di simulare erano i
- * cursori in un'altra scheda, che è il motivo per cui non si capiva dove mettere i valori.
- */
-function cellaSimulataVoce(linea, voce) {
-  const campo = h('input', {
-    type: 'text', inputmode: 'decimal', class: 'num principale simulato',
-    'data-out': 'voce:' + voce.id,
-    placeholder: '\u2014',
-    'aria-label': 'Costo simulato di ' + (voce.nome || 'questa voce'),
-    oninput: (e) => {
-      if (!sim.delta.voce) sim.delta.voce = {};
-      const testo = e.target.value.trim();
-      if (testo === '') { delete sim.delta.voce[voce.id]; aggiornaDerivati(); return; }
-      const partenza = costoVoceSenzaScostamentoProprio(sim, linea, voce);
-      const d = scostamentoPerValore(partenza, leggiNumero(testo));
-      if (d === null) {
-        avvisa('Questa voce parte da zero: inserisci prima un valore nella colonna ' + ETICHETTA_COLONNA[baseSimulato(sim)] + '.');
-        return;
-      }
-      sim.delta.voce[voce.id] = d;
-      aggiornaDerivati();
-    },
-  });
-  return h('td', { class: 'n', 'data-et': 'Simulato' },
-    h('div', { class: 'coppia coppia-valore' },
-      campo,
-      h('span', { class: 'accessorio' },
-        h('span', { class: 'direzione' }),
-        h('span', { class: 'suff', testo: '\u20ac' }))));
-}
-
-/** Stessa logica per il ricavo del servizio. */
-function cellaSimulataRicavo(linea) {
-  const campo = h('input', {
-    type: 'text', inputmode: 'decimal', class: 'num principale simulato',
-    'data-out': 'ricavo:' + linea.id,
-    placeholder: '\u2014',
-    'aria-label': 'Ricavo simulato di ' + (linea.nome || 'questo servizio'),
-    oninput: (e) => {
-      if (!sim.delta.ricavoLinea) sim.delta.ricavoLinea = {};
-      const testo = e.target.value.trim();
-      if (testo === '') { delete sim.delta.ricavoLinea[linea.id]; aggiornaDerivati(); return; }
-      const partenza = ricavoSenzaScostamentoProprio(sim, linea);
-      const d = scostamentoPerValore(partenza, leggiNumero(testo));
-      if (d === null) {
-        avvisa('Questo servizio parte da ricavo zero: inseriscilo prima nella colonna ' + ETICHETTA_COLONNA[baseSimulato(sim)] + '.');
-        return;
-      }
-      sim.delta.ricavoLinea[linea.id] = d;
-      aggiornaDerivati();
-    },
-  });
-  return h('td', { class: 'n', 'data-et': 'Simulato' },
-    h('div', { class: 'coppia coppia-valore' },
-      campo,
-      h('span', { class: 'accessorio' },
-        h('span', { class: 'direzione' }),
-        h('span', { class: 'suff', testo: '\u20ac' }))));
-}
-
-function cellaValore(voce, colonna, percorsoBase) {
-  const accessorio = (...figli) => h('span', { class: 'accessorio' }, ...figli);
-  let dentro;
-
-  if (voce.cat === 'manodopera') {
-    const ore = modoManodopera(voce) === 'ore';
-    dentro = [
-      inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { class: 'num principale', placeholder: '0' }),
-      accessorio(h('span', { class: 'suff', testo: ore ? 'h' : '\u20ac' })),
-    ];
-  } else if (voce.cat === 'materiale') {
-    dentro = [
-      inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { class: 'num principale', placeholder: 'listino', title: 'Importo di listino' }),
-      accessorio(
-        inputNumero(`${percorsoBase}.${colonna}.sconto`, voce[colonna].sconto, { class: 'num sconto', placeholder: '0', title: 'Sconto percentuale sul listino' }),
-        h('span', { class: 'suff', testo: '%' })),
-    ];
-  } else {
-    dentro = [
-      inputNumero(`${percorsoBase}.${colonna}.q`, voce[colonna].q, { class: 'num principale', placeholder: '0' }),
-      accessorio(h('span', { class: 'suff', testo: '\u20ac' })),
-    ];
+  const cols = [h('col', { style: `width:${q(L_VOCE)}` }), h('col', { style: `width:${q(L_VALORE)}` })];
+  for (let i = 0; i < RIDUZIONI.length; i += 1) {
+    cols.push(h('col', { style: `width:${q(L_PCT)}` }));
+    cols.push(h('col', { style: `width:${q(L_VALORE)}` }));
   }
-
-  return h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[colonna] },
-    h('div', { class: 'coppia coppia-valore' }, ...dentro));
+  cols.push(h('col', { style: `width:${q(L_AZIONE)}` }));
+  return h('colgroup', {}, ...cols);
 }
 
-/** Cella di sola lettura con lo stesso impianto, per restare allineata alle celle editabili. */
-function cellaRicavo(percorso, valore, colonna) {
-  return h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[colonna] },
+/** Campo del valore di partenza: è l'unico numero che non deriva da nient'altro. */
+function cellaBase(elemento, chiaveOut) {
+  return h('td', { class: 'n', 'data-et': ETICHETTA_STADIO.preventivo },
     h('div', { class: 'coppia coppia-valore' },
-      inputNumero(percorso, valore, { class: 'num principale', placeholder: '0' }),
-      h('span', { class: 'accessorio' }, h('span', { class: 'suff', testo: '\u20ac' }))));
+      h('input', {
+        type: 'text', inputmode: 'decimal', class: 'num principale',
+        value: elemento.base ? numero(elemento.base) : '',
+        'aria-label': 'Valore di preventivo',
+        oninput: (e) => { elemento.base = leggiNumero(e.target.value); aggiornaDerivati(); },
+      }),
+      h('span', { class: 'accessorio' }, h('span', { class: 'suff', testo: '€' }))),
+    h('span', { hidden: true, 'data-out': chiaveOut }));
 }
 
+/**
+ * Coppia percentuale + valore per uno stadio derivato. Si può scrivere l'una o l'altro:
+ * scrivendo la percentuale si ottiene il valore, scrivendo il valore si ottiene la
+ * percentuale che lo produce. Il KOM resta così un numero che si può dettare, pur essendo
+ * espresso come riduzione rispetto allo stadio precedente.
+ */
+function cellePassaggio(elemento, indice, chiave, etichettaVoce) {
+  const riduzione = RIDUZIONI[indice];
+  const stadio = STADI[indice + 1];
 
-function rigaVoce(linea, iL, voce, iV) {
-  const base = `linee.${iL}.voci.${iV}`;
-  const celleNome = [h('input', {
+  const cellaPct = h('td', { class: 'n cella-pct', 'data-et': 'Riduzione verso ' + ETICHETTA_STADIO_BREVE[stadio] },
+    h('div', { class: 'coppia coppia-pct' },
+      h('input', {
+        type: 'text', inputmode: 'decimal', class: 'num pct',
+        'data-out': `rid:${chiave}:${riduzione}`,
+        placeholder: '0',
+        'aria-label': `Riduzione percentuale verso ${ETICHETTA_STADIO[stadio]} di ${etichettaVoce}`,
+        oninput: (e) => {
+          if (!elemento.rid) elemento.rid = {};
+          elemento.rid[riduzione] = leggiNumero(e.target.value);
+          aggiornaDerivati();
+        },
+      }),
+      h('span', { class: 'suff', testo: '%' })));
+
+  const cellaVal = h('td', { class: 'n', 'data-et': ETICHETTA_STADIO_BREVE[stadio] },
+    h('div', { class: 'coppia coppia-valore' },
+      h('input', {
+        type: 'text', inputmode: 'decimal',
+        class: 'num principale' + (stadio === 'simulato' ? ' simulato' : ''),
+        'data-out': `val:${chiave}:${stadio}`,
+        placeholder: '—',
+        'aria-label': `${ETICHETTA_STADIO[stadio]} di ${etichettaVoce}`,
+        oninput: (e) => {
+          const testo = e.target.value.trim();
+          if (!elemento.rid) elemento.rid = {};
+          if (testo === '') { elemento.rid[riduzione] = 0; aggiornaDerivati(); return; }
+          const p = riduzionePerValore(elemento, stadio, leggiNumero(testo));
+          if (p === null) {
+            avvisa(`${ETICHETTA_STADIO_BREVE[STADI[indice]]} vale zero: da zero nessuna percentuale porta a un altro numero. Inserisci prima il valore di partenza.`);
+            return;
+          }
+          elemento.rid[riduzione] = p;
+          aggiornaDerivati();
+        },
+      }),
+      h('span', { class: 'accessorio' },
+        h('span', { class: 'direzione' }),
+        h('span', { class: 'suff', testo: '€' }))));
+
+  return [cellaPct, cellaVal];
+}
+
+function rigaVoce(servizio, voce) {
+  const nome = h('input', {
     type: 'text', value: voce.nome, list: 'sugg-' + voce.cat,
     'aria-label': 'Nome della voce',
     oninput: (e) => { voce.nome = e.target.value; },
-  })];
-
-  if (voce.cat === 'manodopera') {
-    const ore = modoManodopera(voce) === 'ore';
-    celleNome.push(h('div', { class: 'riga-tariffa' },
-      h('button', {
-        class: 'muto commuta', testo: ore ? 'ore' : '\u20ac',
-        title: ore
-          ? 'Inserita in ore per tariffa oraria. Premi per passare a importo diretto in euro.'
-          : 'Inserita come importo in euro. Premi per passare a ore per tariffa oraria.',
-        'aria-label': ore ? 'Manodopera in ore per tariffa' : 'Manodopera come importo',
-        onclick: () => {
-          voce.modo = ore ? 'importo' : 'ore';
-          if (voce.modo === 'ore' && !voce.tariffaId && sim.tariffe.length) voce.tariffaId = sim.tariffe[0].id;
-          disegna();
-        },
-      }),
-      ore ? h('select', {
-        'aria-label': 'Tariffa oraria applicata',
-        onchange: (e) => { voce.tariffaId = e.target.value || null; aggiornaDerivati(); },
-      },
-      h('option', { value: '', testo: '\u2014 nessuna tariffa \u2014' }),
-      ...sim.tariffe.map((tr) => h('option', {
-        value: tr.id, selected: tr.id === voce.tariffaId,
-        testo: `${tr.nome} \u00b7 ${tr.eurOra ? numero(tr.eurOra) + ' \u20ac/h' : 'da impostare'}`,
-      }))) : null));
-  }
-
+  });
   return h('tr', {},
-    h('td', { 'data-et': 'Voce' }, ...celleNome),
-    ...colonneInput().map((c) => cellaValore(voce, c, base)),
-    cellaSimulataVoce(linea, voce),
+    h('td', { 'data-et': 'Voce' }, nome),
+    cellaBase(voce, `val:${voce.id}:preventivo`),
+    ...RIDUZIONI.flatMap((_, i) => cellePassaggio(voce, i, voce.id, voce.nome || 'questa voce')),
     h('td', { class: 'azione-riga' }, h('button', {
-      class: 'muto', title: 'Rimuovi voce', 'aria-label': 'Rimuovi voce', testo: '\u00d7',
-      onclick: () => conAnnulla(`Voce "${voce.nome || 'senza nome'}" rimossa.`, () => linea.voci.splice(iV, 1)),
+      class: 'muto', title: 'Rimuovi voce', 'aria-label': 'Rimuovi voce', testo: '×',
+      onclick: () => conAnnulla(`Voce "${voce.nome || 'senza nome'}" rimossa.`,
+        () => { servizio.voci = servizio.voci.filter((x) => x.id !== voce.id); }),
     })));
 }
 
-
-function tabellaLineaDettagliata(linea, iL) {
-  const cols = colonneInput();
+function tabellaServizio(servizio) {
   const corpo = h('tbody', {});
+
   corpo.appendChild(h('tr', { class: 'somma' },
     h('td', { 'data-et': 'Voce', testo: 'Ricavo del servizio' }),
-    ...cols.map((c) => cellaRicavo(`linee.${iL}.ricavo.${c}`, linea.ricavo[c], c)),
-    cellaSimulataRicavo(linea),
+    cellaBase(servizio.ricavo, `val:ric-${servizio.id}:preventivo`),
+    ...RIDUZIONI.flatMap((_, i) => cellePassaggio(servizio.ricavo, i, 'ric-' + servizio.id, 'ricavo')),
     h('td', { class: 'azione-riga' })));
 
-  for (const cat of categorieVisibili(linea)) {
-    const voci = linea.voci.filter((v) => v.cat === cat);
-    corpo.appendChild(h('tr', { class: 'cat' }, h('td', { colspan: cols.length + 3 }, ETICHETTA_CATEGORIA[cat])));
-    for (const voce of voci) corpo.appendChild(rigaVoce(linea, iL, voce, linea.voci.indexOf(voce)));
+  for (const cat of CATEGORIE) {
+    const voci = servizio.voci.filter((v) => v.cat === cat);
+    corpo.appendChild(h('tr', { class: 'cat' },
+      h('td', { colspan: 2 + RIDUZIONI.length * 2 + 1 }, ETICHETTA_CATEGORIA[cat])));
+    for (const voce of voci) corpo.appendChild(rigaVoce(servizio, voce));
     corpo.appendChild(h('tr', {},
       h('td', { 'data-et': 'Voce' }, h('button', {
         class: 'muto', testo: '+ voce',
-        onclick: () => { linea.voci.push(nuovaVoce(cat, '', sim.tariffe)); disegna(); },
+        onclick: () => { servizio.voci.push(nuovaVoce(cat, '')); disegna(); },
       })),
-      ...cols.map(() => h('td', { class: 'n' })),
-      h('td', { class: 'n derivato', 'data-et': 'Totale ' + ETICHETTA_CATEGORIA[cat], 'data-out': `cat:${linea.id}:${cat}`, testo: '\u2014' }),
+      ...STADI.flatMap((st, i) => {
+        const celle = i === 0 ? [] : [h('td', { class: 'n cella-pct' })];
+        celle.push(h('td', {
+          class: 'n derivato', 'data-et': 'Totale ' + ETICHETTA_CATEGORIA[cat] + ' ' + ETICHETTA_STADIO_BREVE[st],
+          'data-out': `cat:${servizio.id}:${cat}:${st}`, testo: '—',
+        }));
+        return celle;
+      }),
       h('td', { class: 'azione-riga' })));
   }
 
-  corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { 'data-et': 'Voce', testo: 'Totale costi diretti' }),
-    ...cols.map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `cdcol:${linea.id}:${c}`, testo: '\u2014' })),
-    h('td', { class: 'n', 'data-et': 'Simulato', 'data-out': `cdcol:${linea.id}:simulato`, testo: '\u2014' }),
-    h('td', { class: 'azione-riga' })));
-  corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { 'data-et': 'Voce', testo: 'Margine di contribuzione' }),
-    ...[...cols, 'simulato'].map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `mdclinea:${linea.id}:${c}`, testo: '\u2014' })),
-    h('td', { class: 'azione-riga' })));
+  const rigaTotale = (etichetta, prefisso) => h('tr', { class: 'somma' },
+    h('td', { 'data-et': 'Voce', testo: etichetta }),
+    ...STADI.flatMap((st, i) => {
+      const celle = i === 0 ? [] : [h('td', { class: 'n cella-pct' })];
+      celle.push(h('td', {
+        class: 'n', 'data-et': ETICHETTA_STADIO_BREVE[st],
+        'data-out': `${prefisso}:${servizio.id}:${st}`, testo: '—',
+      }));
+      return celle;
+    }),
+    h('td', { class: 'azione-riga' }));
 
-  return h('div', { class: 'tabellone' }, h('table', {
-    class: 'tab-dati tab-fissa',
-    style: `max-width:${larghezzaTabella(cols.length, true)}px`,
-  },
-    colonneTabella(cols.length, true),
-    h('thead', {}, h('tr', {},
-      h('th', { testo: 'Voce' }),
-      ...cols.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })),
-      h('th', { class: 'n', testo: 'Simulato' }),
-      h('th', { class: 'azione-riga' }))),
-    corpo));
+  corpo.appendChild(rigaTotale('Totale costi diretti', 'cdserv'));
+  corpo.appendChild(rigaTotale('Margine di contribuzione', 'mdcserv'));
+
+  const intestazione = h('tr', {}, h('th', { testo: 'Voce' }));
+  STADI.forEach((st, i) => {
+    if (i > 0) intestazione.appendChild(h('th', { class: 'n th-pct', title: 'Riduzione percentuale rispetto allo stadio precedente: sconti, ottimizzazioni previste, trattative con i fornitori', testo: '− %' }));
+    intestazione.appendChild(h('th', { class: 'n' + (st === 'simulato' ? ' th-simulato' : ''), testo: ETICHETTA_STADIO_BREVE[st] }));
+  });
+  intestazione.appendChild(h('th', { class: 'azione-riga' }));
+
+  return h('div', { class: 'tabellone' },
+    h('table', { class: 'tab-dati tab-fissa', style: `max-width:${larghezzaTabella()}px` },
+      colonneTabella(),
+      h('thead', {}, intestazione),
+      corpo));
 }
 
-
-function tabellaLineaSemplice(linea, iL) {
-  const cols = colonneInput();
-  const corpo = h('tbody', {});
-  corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { 'data-et': 'Voce', testo: 'Ricavo del servizio' }),
-    ...cols.map((c) => cellaRicavo(`linee.${iL}.ricavo.${c}`, linea.ricavo[c], c)),
-    cellaSimulataRicavo(linea)));
-
-  for (const cat of categorieVisibili(linea)) {
-    const voci = linea.voci.filter((v) => v.cat === cat);
-    const unica = voci.length === 1 ? voci[0] : null;
-    const iV = unica ? linea.voci.indexOf(unica) : -1;
-    const suffisso = unica && unica.cat === 'manodopera' && modoManodopera(unica) === 'ore' ? ' (ore)' : '';
-    const suff = unica && unica.cat === 'manodopera' && modoManodopera(unica) === 'ore' ? 'h' : '\u20ac';
-    const celle = cols.map((c) => (unica
-      ? h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c] },
-        h('div', { class: 'coppia coppia-valore' },
-          inputNumero(`linee.${iL}.voci.${iV}.${c}.q`, unica[c].q, { class: 'num principale', placeholder: '0' }),
-          h('span', { class: 'accessorio' }, h('span', { class: 'suff', testo: suff }))))
-      : h('td', { class: 'n derivato', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `catcol:${linea.id}:${cat}:${c}`, testo: '\u2014' })));
-
-    corpo.appendChild(h('tr', {},
-      h('td', { 'data-et': 'Voce' },
-        h('strong', { testo: ETICHETTA_CATEGORIA[cat] + suffisso }),
-        voci.length > 1
-          ? h('div', { class: 'nota', style: 'margin:0' },
-            `somma di ${voci.length} voci. `,
-            h('button', {
-              class: 'muto commuta',
-              testo: 'modifica nel dettaglio',
-              onclick: () => { livello = 'completo'; disegna(); avvisa('Livello Completo: ora le singole voci sono modificabili.'); },
-            }))
-          : null,
-        voci.length === 0
-          ? h('button', {
-            class: 'muto', testo: '+ aggiungi',
-            onclick: () => { linea.voci.push(nuovaVoce(cat, ETICHETTA_CATEGORIA[cat], sim.tariffe)); disegna(); },
-          })
-          : null),
-      ...celle,
-      h('td', { class: 'n derivato', 'data-et': 'Simulato', 'data-out': `cat:${linea.id}:${cat}`, testo: '\u2014' })));
-  }
-
-  corpo.appendChild(h('tr', { class: 'somma' },
-    h('td', { 'data-et': 'Voce', testo: 'Margine di contribuzione' }),
-    ...[...cols, 'simulato'].map((c) => h('td', { class: 'n', 'data-et': ETICHETTA_COLONNA[c], 'data-out': `mdclinea:${linea.id}:${c}`, testo: '\u2014' }))));
-
-  return h('div', { class: 'tabellone' }, h('table', {
-    class: 'tab-dati tab-fissa',
-    style: `max-width:${larghezzaTabella(cols.length, false)}px`,
-  },
-    colonneTabella(cols.length, false),
-    h('thead', {}, h('tr', {},
-      h('th', { testo: 'Categoria' }),
-      ...cols.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })),
-      h('th', { class: 'n', testo: 'Simulato' }))),
-    corpo));
-}
-
-
-function pannelloLinea(linea, iL) {
+function pannelloServizio(servizio, i) {
   return h('section', { class: 'pannello' },
-    h('div', { class: 'linea-titolo' },
+    h('div', { class: 'servizio-titolo' },
       h('input', {
-        type: 'text', value: linea.nome, 'aria-label': 'Nome del servizio',
-        oninput: (e) => { linea.nome = e.target.value; aggiornaDerivati(); },
+        type: 'text', value: servizio.nome, 'aria-label': 'Nome del servizio',
+        oninput: (e) => { servizio.nome = e.target.value; aggiornaDerivati(); },
       }),
       h('button', {
-        class: 'muto', title: 'Rimuovi il servizio', 'aria-label': 'Rimuovi il servizio', testo: '\u00d7',
-        onclick: () => conAnnulla(`Servizio "${linea.nome}" rimossa con le sue ${linea.voci.length} voci.`, () => sim.linee.splice(iL, 1)),
+        class: 'muto', title: 'Rimuovi il servizio', 'aria-label': 'Rimuovi il servizio', testo: '×',
+        onclick: () => conAnnulla(`Servizio "${servizio.nome}" rimosso con le sue ${servizio.voci.length} voci.`,
+          () => { sim.servizi.splice(i, 1); }),
       })),
-    livello === 'completo' ? tabellaLineaDettagliata(linea, iL) : tabellaLineaSemplice(linea, iL));
+    tabellaServizio(servizio));
 }
 
-function bannerEsempio() {
-  if (!eEsempio(sim)) return null;
-  return h('div', { class: 'avviso' },
-    h('span', {}, 'Stai guardando una commessa di esempio, con numeri inventati. Serve a mostrare come funziona: sostituisci i valori con quelli della tua commessa, oppure parti da una maschera vuota.'),
-    h('button', {
-      style: 'margin-left:auto;white-space:nowrap', testo: 'Parti da zero',
-      onclick: () => { sim = nuovaSimulazione(); disegna(); },
-    }));
-}
-
-
-function pannelloLivello() {
-  const corrente = LIVELLI.find((x) => x[0] === livello);
-  return h('section', { class: 'pannello pannello-livello' },
-    h('div', { class: 'corpo' },
-      h('div', { class: 'scelta-livello' },
-        h('span', { class: 'et-livello', testo: 'Livello di dettaglio' }),
-        h('div', { class: 'gruppo-bottoni' },
-          ...LIVELLI.map(([k, et]) => h('button', {
-            class: livello === k ? 'selezionato' : '', testo: et,
-            'aria-pressed': livello === k ? 'true' : 'false',
-            onclick: () => { livello = k; disegna(); },
-          })))),
-      h('p', { class: 'nota', style: 'margin-top:6px', testo: corrente ? corrente[2] : '' })));
-}
-
-function guidaColonne() {
-  const base = ETICHETTA_COLONNA[baseSimulato(sim)];
-  const voci = [];
-  if (colonneInput().includes('preventivo')) voci.push(['Preventivo', 'i numeri dell\u2019offerta. Si scrivono una volta e restano come riferimento.']);
-  voci.push(['KOM', 'il budget concordato al kick off meeting. È la base su cui poggia la simulazione.']);
-  voci.push(['Simulato', `si scrive qui. Metti quanto pensi che quella voce costerà davvero e il margine si aggiorna subito. Svuotando la casella torna al valore ${base}.`]);
-
-  return h('section', { class: 'pannello pannello-guida-colonne' },
-    h('div', { class: 'corpo' },
-      h('h3', { class: 'sotto-titolo', testo: 'Dove si scrivono i valori' }),
-      h('dl', { class: 'guida-elenco' },
-        ...voci.flatMap(([et, testo]) => [h('dt', { testo: et }), h('dd', { testo })])),
-      h('p', { class: 'nota legenda-colori' },
-        h('span', { class: 'v-buono', testo: '\u25bc verde' }), ' il margine ci guadagna, ',
-        h('span', { class: 'v-critico', testo: '\u25b2 rosso' }), ' ci perde. Su un costo guadagna quando scende, su ricavo e margine quando salgono.'),
-      h('p', { class: 'nota' }, 'Per variare più voci insieme, o per partire dal margine che vuoi ottenere, usa la scheda ',
-        h('button', {
-          class: 'muto commuta', testo: 'Simulazione',
-          onclick: () => { scheda = 'simulazione'; disegna(); },
-        }), '.')));
-}
-
-function schedaDati() {
-  const espansioni = [];
-  if (livello === 'base') {
-    espansioni.push(pulsanteEspandi('intermedio', '+ Confronta con il preventivo'));
-    espansioni.push(pulsanteEspandi('intermedio', '+ Altri costi diretti: trasferte, noleggi, subappalti'));
-  }
-  if (livello === 'intermedio') {
-    espansioni.push(pulsanteEspandi('completo', '+ Dettaglio per marca fornitore e tipo di manodopera'));
-  }
-
-  return h('div', {},
-    bannerEsempio(),
-    pannelloLivello(),
-    guidaColonne(),
-    pannelloCommessa(),
-    pannelloParametri(),
-    ...sim.linee.map((l, i) => pannelloLinea(l, i)),
-    espansioni.length
-      ? h('section', { class: 'pannello' },
-        h('h2', { testo: 'Serve più dettaglio?' }),
-        h('div', { class: 'corpo' },
-          h('div', { class: 'azioni' }, ...espansioni),
-          h('p', { class: 'nota', testo: 'Nulla di quello che hai inserito viene perso: il livello cambia solo cosa è visibile.' })))
-      : null,
-    pannelloAggiungiLinea());
-}
-
-function pannelloAggiungiLinea() {
-  const presenti = new Set(sim.linee.map((l) => l.nome.trim().toLowerCase()));
-  const mancanti = nomiLineeStandard().filter((n) => !presenti.has(n.trim().toLowerCase()));
+function pannelloAggiungiServizio() {
+  const presenti = new Set(sim.servizi.map((s) => s.nome.trim().toLowerCase()));
+  const mancanti = nomiServiziStandard().filter((n) => !presenti.has(n.trim().toLowerCase()));
   return h('section', { class: 'pannello' },
     h('h2', { testo: 'Aggiungi un servizio' }),
     h('div', { class: 'corpo' },
       h('div', { class: 'azioni' },
         ...mancanti.map((n) => h('button', {
-          class: 'primario', testo: '+ ' + n,
-          onclick: () => {
-            sim.linee.push(lineaStandard(n, sim.tariffe));
-            disegna();
-            avvisa(`Servizio "${n}" aggiunto con le sue voci di default.`);
-          },
+          testo: '+ ' + n,
+          onclick: () => { sim.servizi.push(servizioStandard(n)); disegna(); avvisa(`Servizio "${n}" aggiunto.`); },
         })),
         h('button', {
           testo: '+ servizio personalizzato',
-          onclick: () => { sim.linee.push(nuovaLinea('Nuovo servizio')); disegna(); },
+          onclick: () => { sim.servizi.push(nuovoServizio('Nuovo servizio')); disegna(); },
         })),
-      mancanti.length
-        ? h('p', { class: 'nota', testo: 'I servizi standard tornano completi delle loro voci di default. I valori vanno reinseriti.' })
-        : h('p', { class: 'nota', testo: 'Tutti e tre i servizi standard sono presenti.' })));
+      h('p', { class: 'nota', testo: 'Un servizio in più aggiunge una tabella: ricavo e costi diretti si sommano a quelli già presenti.' })));
 }
 
-// --- scheda simulazione ------------------------------------------------------------
+// --- cruscotto ----------------------------------------------------------------------
 
-function cursore(etichetta, percorso, valore, uscita) {
-  const nInput = h('input', {
-    type: 'text', inputmode: 'decimal', class: 'num', value: String(valore ?? 0).replace('.', ','),
-    oninput: (e) => {
-      const v = leggiNumero(e.target.value);
-      imposta(percorso, v);
-      range.value = Math.max(-60, Math.min(60, v));
-      aggiornaDerivati();
-    },
-  });
-  const range = h('input', {
-    type: 'range', min: -60, max: 60, step: 1, value: Math.max(-60, Math.min(60, valore ?? 0)),
-    'aria-label': etichetta,
-    oninput: (e) => {
-      const v = Number(e.target.value);
-      imposta(percorso, v);
-      nInput.value = String(v).replace('.', ',');
-      aggiornaDerivati();
-    },
-  });
-  return h('div', { class: 'cursore' },
-    h('div', { class: 'et', testo: etichetta, title: etichetta }),
-    range,
-    h('div', { class: 'coppia' }, nInput, h('span', { class: 'suff', testo: '%' })),
-    uscita ? h('div', { class: 'esito', 'data-out': uscita, testo: '—' }) : null);
+const usaRiserva = () => Number(sim.parametri.riservaPct || 0) !== 0;
+
+function rigaRiepilogo(etichetta, chiave, formato = 'euro', forte = false) {
+  return h('tr', forte ? { class: 'somma' } : {},
+    h('td', { 'data-et': 'Voce', testo: etichetta }),
+    ...STADI.map((st) => h('td', {
+      class: 'n' + (st === 'simulato' ? ' col-simulato' : ''),
+      'data-et': ETICHETTA_STADIO_BREVE[st],
+      'data-out': `tot:${st}:${chiave}:${formato}`, testo: '—',
+    })));
 }
 
-/** Effetto della simulazione, mostrato dove si agisce: senza questo riquadro si muovono i
- *  cursori e il risultato si vede solo cambiando scheda. */
-function riepilogoSimulazione() {
-  const righe = [
-    ['ricavo', 'euro', 'Ricavo'],
-    ['cd', 'euro', 'Costi diretti'],
-    ['mdc', 'euro', 'Margine di contribuzione'],
-    ['mdcPct', 'perc', 'Marginalità'],
-    ...(usaStruttura() ? [
-      ['mi', 'euro', 'Margine industriale'],
-      ['miPct', 'perc', 'Margine industriale %'],
-    ] : []),
-  ];
+function pannelloRiepilogo() {
   return h('section', { class: 'pannello' },
-    h('h2', { testo: 'Effetto della simulazione' }),
-    h('div', { class: 'corpo' },
-      h('p', { class: 'nota', style: 'margin-top:0', id: 'base-simulazione', testo: '' }),
-      h('div', { class: 'tabellone' }, h('table', { class: 'tab-confronto' },
+    h('h2', { testo: 'Margine nei quattro stadi' }),
+    h('div', { class: 'tabellone' },
+      h('table', { class: 'tab-confronto' },
         h('thead', {}, h('tr', {},
-          h('th', { testo: 'Grandezza' }),
-          h('th', { class: 'n', 'data-out': 'cmp:intestazione', testo: 'Base' }),
-          h('th', { class: 'n', testo: 'Simulato' }),
-          h('th', { class: 'n', testo: 'Variazione' }))),
-        h('tbody', {}, ...righe.map(([k, f, et]) => h('tr', k === 'mdc' || k === 'miPct' ? { class: 'somma' } : {},
-          h('td', { 'data-et': 'Grandezza', testo: et }),
-          h('td', { class: 'n', 'data-et': 'Base', 'data-out': `cmp:${k}:base:${f}`, testo: '\u2014' }),
-          h('td', { class: 'n', 'data-et': 'Simulato', 'data-out': `cmp:${k}:sim:${f}`, testo: '\u2014' }),
-          h('td', { class: 'n', 'data-et': 'Variazione', 'data-out': `cmp:${k}:delta:${f}`, testo: '\u2014' })))))))); 
+          h('th', { testo: 'Voce' }),
+          ...STADI.map((st) => h('th', {
+            class: 'n' + (st === 'simulato' ? ' th-simulato' : ''),
+            testo: ETICHETTA_STADIO_BREVE[st],
+          })))),
+        h('tbody', {},
+          rigaRiepilogo('Ricavo', 'ricavo'),
+          rigaRiepilogo('Costi diretti', 'cd'),
+          rigaRiepilogo('Margine di contribuzione', 'mdc', 'euro', true),
+          rigaRiepilogo('Marginalità', 'mdcPct', 'perc', true),
+          ...(usaRiserva() ? [
+            rigaRiepilogo('Riserva per imprevisti', 'imprevisti'),
+            rigaRiepilogo('Margine industriale', 'mi', 'euro', true),
+            rigaRiepilogo('Margine industriale %', 'miPct', 'perc', true),
+          ] : []),
+          rigaRiepilogo('Spazio residuo sui costi', 'spazio')))),
+    h('div', { class: 'corpo' },
+      h('div', { id: 'cascata' }),
+      h('p', { class: 'nota', id: 'lettura-spazio', testo: '' })));
 }
 
-/**
- * Terza via di simulazione, oltre a costi e ricavi: si parte dal margine che si vuole
- * ottenere e lo strumento dice quale scostamento serve. Il risultato non è una risposta
- * chiusa: diventa uno scostamento normale, visibile nei cursori, modificabile e
- * annullabile come se fosse stato inserito a mano.
- */
-function pannelloMargine() {
+function pannelloObiettivo() {
   const valore = margineVoluto === null ? (sim.parametri.targetPct || 0) : margineVoluto;
 
   const applica = () => {
-    const r = scostamentoPerMargine(sim, valore, levaMargine);
+    const r = riduzionePerMargine(sim, valore);
     if (!r.possibile) { avvisa(r.motivo); return; }
-    const campo = levaMargine === 'costi' ? 'globale' : 'ricavo';
-    // Arrotondato al centesimo di punto: un cursore con quindici decimali non si legge e
-    // non si ritocca, e sul margine la differenza è sotto il decimo di punto.
-    const scostamento = Math.round(r.deltaPct * 100) / 100;
-    conAnnulla(
-      `Applicato ${percRel(scostamento)} su ${levaMargine === 'costi' ? 'tutti i costi' : 'tutti i ricavi'} per raggiungere il ${perc(valore / 100)}.`,
-      () => { sim.delta = { ...(sim.delta || {}), [campo]: scostamento }; },
-    );
+    const p = Math.round(r.riduzionePct * 100) / 100;
+    conAnnulla(`Applicata una riduzione del ${testoPct(p)}% su tutte le voci per raggiungere il ${perc(valore / 100)}.`,
+      () => {
+        for (const s of sim.servizi) for (const v of s.voci) { if (!v.rid) v.rid = {}; v.rid.simulato = p; }
+      });
   };
 
   return h('section', { class: 'pannello' },
@@ -2228,272 +1785,87 @@ function pannelloMargine() {
             value: String(valore).replace('.', ','),
             oninput: (e) => { margineVoluto = leggiNumero(e.target.value); aggiornaDerivati(); },
           })),
-        h('div', { class: 'scelta-leva' },
-          h('span', { class: 'et-livello', testo: 'Agendo su' }),
-          h('div', { class: 'gruppo-bottoni' },
-            ...Object.entries(LEVE).map(([k, et]) => h('button', {
-              class: levaMargine === k ? 'selezionato' : '', testo: et,
-              'aria-pressed': levaMargine === k ? 'true' : 'false',
-              onclick: () => { levaMargine = k; disegna(); },
-            }))))),
-      h('p', { class: 'esito-margine', id: 'esito-margine', testo: '' }),
-      h('div', { class: 'azioni' },
-        h('button', { class: 'primario', testo: 'Applica lo scostamento', onclick: applica }),
+        h('button', { class: 'primario', testo: 'Applica su tutte le voci', onclick: applica }),
         h('button', {
-          testo: 'Azzera gli scostamenti',
-          onclick: () => { sim.delta = { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: {}, voce: {} }; disegna(); },
+          testo: 'Azzera le riduzioni simulate',
+          onclick: () => conAnnulla('Riduzioni simulate azzerate.',
+            () => { for (const s of sim.servizi) for (const v of s.voci) { if (v.rid) v.rid.simulato = 0; } }),
         })),
-      h('p', { class: 'nota', testo: 'Lo scostamento calcolato finisce nei cursori qui sotto: da lì lo puoi ritoccare, distribuire su un singolo servizio o annullare.' })));
+      h('p', { class: 'esito-margine', id: 'esito-margine', testo: '' }),
+      h('p', { class: 'nota', testo: 'La riduzione calcolata finisce nella colonna % verso Simulato di ogni voce: da lì la ritocchi voce per voce, concentrandola dove è davvero ottenibile.' })));
 }
 
-function schedaSimulazione() {
-  const globali = h('div', { class: 'cursori' },
-    cursore('Tutti i costi', 'delta.globale', sim.delta.globale),
-    cursore('Tutti i ricavi', 'delta.ricavo', sim.delta.ricavo));
-
-  const perLinea = sim.linee.map((l) => h('section', { class: 'pannello' },
-    h('h2', { testo: l.nome || 'Servizio' }),
-    h('div', { class: 'corpo' },
-      h('div', { class: 'cursori' },
-        cursore('Ricavo del servizio', `delta.ricavoLinea.${l.id}`, sim.delta.ricavoLinea?.[l.id] ?? 0),
-        cursore('Tutti i costi del servizio', `delta.linea.${l.id}`, sim.delta.linea?.[l.id] ?? 0),
-        ...CATEGORIE.filter((c) => l.voci.some((v) => v.cat === c)).map((c) =>
-          cursore(ETICHETTA_CATEGORIA[c], `delta.catLinea.${l.id}|${c}`, sim.delta.catLinea?.[`${l.id}|${c}`] ?? 0, `catsim:${l.id}:${c}`))))));
-
-  return h('div', {},
-    riepilogoSimulazione(),
-    pannelloMargine(),
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Scostamenti complessivi' }),
-      h('div', { class: 'corpo' }, globali,
-        h('p', { class: 'nota' }, 'Gli scostamenti si applicano alla colonna KOM e si compongono moltiplicativamente: complessivo, poi servizio, poi categoria. Il KOM non viene modificato.'),
-        h('button', {
-          style: 'margin-top:8px', testo: 'Azzera tutti gli scostamenti',
-          onclick: () => { sim.delta = { ricavo: 0, ricavoLinea: {}, globale: 0, linea: {}, catLinea: {}, voce: {} }; disegna(); },
-        }))),
-    ...perLinea,
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Dove conviene intervenire' }),
-      h('div', { class: 'corpo' },
-        h('div', { class: 'azioni', style: 'margin-bottom:8px;align-items:center' },
-          h('span', { class: 'et-livello', testo: 'Dettaglio' }),
-          ...[['voce', 'Per voce'], ['categoria', 'Per categoria']].map(([k, et]) => h('button', {
-            class: livelloSensitivita === k ? 'selezionato' : '', testo: et,
-            'aria-pressed': livelloSensitivita === k ? 'true' : 'false',
-            onclick: () => { livelloSensitivita = k; disegna(); },
-          }))),
-        h('div', { id: 'tornado' }),
-        h('p', { class: 'nota', testo: 'Effetto sul margine di una variazione di più o meno 10%, tenendo fermo tutto il resto. In cima c\u2019è la voce dove un punto guadagnato vale di più.' }))));
-}
-
-// --- scheda confronto --------------------------------------------------------------
-
-
-function rigaConfronto(etichetta, chiave, formato = 'euro', forte = false) {
-  return h('tr', forte ? { class: 'somma' } : {},
-    h('td', { 'data-et': 'Voce', testo: etichetta }),
-    ...COLONNE.map((c) => h('td', {
-      class: 'n', 'data-et': ETICHETTA_COLONNA[c],
-      'data-out': `tot:${c}:${chiave}:${formato}`, testo: '\u2014',
-    })));
-}
-
-
-function tabellaGap(titolo, chiave, sottotitolo) {
-  const conMi = usaStruttura();
-  const riga = (et, k) => h('tr', k === 'effettoRicavo' || k === 'effettoCosto' ? { class: 'somma' } : {},
-    h('td', { 'data-et': 'Grandezza', testo: et }),
-    h('td', { class: 'n', 'data-et': 'Margine di contribuzione', 'data-out': `gap:${chiave}:${k}:${k.includes('Pp') ? 'punti' : k.includes('Rel') ? 'rel' : 'euro'}`, testo: '\u2014' }),
-    !conMi ? null
-      : (k === 'effettoRicavo' || k === 'effettoCosto')
-        ? h('td', { class: 'n', 'data-et': 'Margine industriale' })
-        : h('td', { class: 'n', 'data-et': 'Margine industriale', 'data-out': `gap:${chiave}:${k.replace('Mdc', 'Mi')}:${k.includes('Pp') ? 'punti' : k.includes('Rel') ? 'rel' : 'euro'}`, testo: '\u2014' }));
-
+function pannelloSensitivita() {
   return h('section', { class: 'pannello' },
-    h('h2', { testo: titolo }),
+    h('h2', { testo: 'Dove conviene intervenire' }),
     h('div', { class: 'corpo' },
-      h('p', { class: 'nota', style: 'margin-top:0', testo: sottotitolo }),
-      h('div', { class: 'tabellone' }, h('table', { class: 'tab-confronto' },
-        h('thead', {}, h('tr', {},
-          h('th', { testo: 'Grandezza' }),
-          h('th', { class: 'n', testo: 'Margine di contribuzione' }),
-          conMi ? h('th', { class: 'n', testo: 'Margine industriale' }) : null)),
-        h('tbody', {},
-          riga('Variazione assoluta', 'dMdc'),
-          riga('Variazione della marginalità', 'dMdcPp'),
-          riga('Variazione relativa del margine', 'dMdcRel'),
-          riga('di cui effetto ricavo', 'effettoRicavo'),
-          riga('di cui effetto costo', 'effettoCosto')))),
-      h('div', { class: 'tabellone', style: 'margin-top:10px' }, h('table', { class: 'tab-confronto' },
-        h('thead', {}, h('tr', {},
-          h('th', { testo: 'Per servizio' }),
-          h('th', { class: 'n', testo: 'Effetto ricavo' }),
-          ...CATEGORIE.map((c) => h('th', { class: 'n', testo: ETICHETTA_CATEGORIA[c] })),
-          h('th', { class: 'n', testo: 'Totale' }))),
-        h('tbody', { 'data-lista': 'perlinea:' + chiave })))));
+      h('div', { id: 'tornado' }),
+      h('p', { class: 'nota', testo: 'Quanto guadagnerebbe il margine riducendo del 10% quella sola voce, partendo dal valore simulato attuale. In cima c’è dove un punto ottenuto vale di più.' })));
 }
 
-function pannelloIncidenze() {
-  const spiegazione = riferimentoIncidenza === 'cd'
-    ? 'Quanto pesa ogni voce sui costi diretti: descrive la composizione del costo. Attenzione: uno scostamento applicato a tutte le voci nella stessa misura non muove queste percentuali, perché le proporzioni restano identiche.'
-    : 'Quanto pesa ogni voce sul ricavo: descrive quanta parte della commessa se ne va in quella voce. Si muove per qualunque scostamento. Le voci più il margine di contribuzione fanno 100%.';
+function bannerEsempio() {
+  if (!eEsempio(sim)) return null;
+  return h('div', { class: 'avviso' },
+    h('span', {}, 'Stai guardando una commessa di esempio, con numeri inventati. Sostituisci i valori con quelli della tua commessa, oppure parti da una maschera vuota.'),
+    h('button', {
+      style: 'margin-left:auto;white-space:nowrap', testo: 'Parti da zero',
+      onclick: () => { sim = nuovaSimulazione(); disegna(); },
+    }));
+}
 
+function guidaColonne() {
+  return h('section', { class: 'pannello pannello-guida-colonne' },
+    h('div', { class: 'corpo' },
+      h('h3', { class: 'sotto-titolo', testo: 'Come si legge la tabella' }),
+      h('p', {}, 'Si scrive il valore di ',
+        h('b', { testo: 'Preventivo' }),
+        ', poi una percentuale per ogni passaggio: quanto si ottiene in trattativa con i fornitori, quanto viene fissato al KOM, quanto si pensa di ottimizzare ancora. Ogni colonna è la precedente meno la sua percentuale.'),
+      h('p', {}, 'Ogni casella si scrive in entrambi i modi: metti la percentuale e ottieni il valore, oppure metti il valore e ottieni la percentuale. Una percentuale negativa è un aumento.'),
+      h('p', { class: 'nota legenda-colori' },
+        h('span', { class: 'v-buono', testo: '▼ verde' }), ' il margine ci guadagna, ',
+        h('span', { class: 'v-critico', testo: '▲ rosso' }), ' ci perde. Su un costo guadagna quando scende, su ricavo e margine quando salgono.')));
+}
+
+function pannelloCommessa() {
   return h('section', { class: 'pannello' },
-    h('h2', { testo: 'Incidenza delle voci e come si sposta' }),
+    h('h2', { testo: 'Commessa' }),
     h('div', { class: 'corpo' },
-      h('div', { class: 'azioni', style: 'margin-bottom:8px;align-items:center' },
-        h('strong', { style: 'font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3)', testo: 'Incidenza su' }),
-        ...Object.entries(RIFERIMENTI_INCIDENZA).map(([k, et]) => h('button', {
-          class: riferimentoIncidenza === k ? 'selezionato' : '', testo: et,
-          onclick: () => { riferimentoIncidenza = k; disegna(); },
-        }))),
-      h('p', { class: 'nota', style: 'margin-top:0', testo: spiegazione }),
-      h('div', { class: 'tabellone' }, h('table', { class: 'tab-confronto tab-incidenze' },
-        h('thead', {}, h('tr', {},
-          h('th', { testo: 'Voce' }),
-          ...COLONNE.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })),
-          h('th', { class: 'n', testo: 'Prev \u2192 KOM' }),
-          h('th', { class: 'n', testo: 'KOM \u2192 Sim' }))),
-        h('tbody', { 'data-lista': 'incidenze' })))));
+      h('div', { class: 'campi' },
+        campoTesto('Codice commessa', 'meta.codice', sim.meta.codice, { placeholder: 'es. C-2026-014' }),
+        campoTesto('Cliente', 'meta.cliente', sim.meta.cliente),
+        campoTesto('Descrizione', 'meta.descrizione', sim.meta.descrizione),
+        campoTesto('Data', 'meta.data', sim.meta.data, { type: 'date' }),
+        campoTesto('Compilata da', 'meta.autore', sim.meta.autore))));
 }
 
-function schedaConfronto() {
+function pannelloParametri() {
+  return h('section', { class: 'pannello' },
+    h('h2', { testo: 'Parametri' }),
+    h('div', { class: 'corpo' },
+      h('div', { class: 'campi' },
+        campoNumero('Margine obiettivo %', 'parametri.targetPct', sim.parametri.targetPct),
+        h('div', { class: 'campo-spiegato' },
+          campoNumero('Riserva per imprevisti %', 'parametri.riservaPct', sim.parametri.riservaPct),
+          h('div', { class: 'valore-vivo' },
+            h('span', { testo: 'sullo stadio simulato: ' }),
+            h('b', { 'data-out': 'tot:simulato:imprevisti:euro', testo: '—' })))),
+      h('p', { class: 'nota', testo: 'Il margine obiettivo è la soglia sotto la quale la commessa non deve scendere: colora il semaforo e determina lo spazio residuo. La riserva per imprevisti è un accantonamento sui costi per rischi non ancora emersi, non un costo già sostenuto; a zero sparisce dalle tabelle.' })));
+}
+
+function schedaCruscotto() {
   return h('div', {},
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Le tre colonne a confronto' }),
-      h('div', { class: 'tabellone' }, h('table', { class: 'tab-confronto' },
-        h('thead', {}, h('tr', {},
-          h('th', { testo: 'Voce' }),
-          ...COLONNE.map((c) => h('th', { class: 'n', testo: ETICHETTA_COLONNA[c] })))),
-        h('tbody', {},
-          rigaConfronto('Ricavo', 'ricavo'),
-          rigaConfronto('Costi diretti', 'cd'),
-          rigaConfronto('Margine di contribuzione', 'mdc', 'euro', true),
-          rigaConfronto('Marginalità', 'mdcPct', 'perc', true),
-          ...(usaStruttura() ? [
-            rigaConfronto('Costi di struttura', 'speseGenerali'),
-            rigaConfronto('Riserva per imprevisti', 'contingency'),
-            rigaConfronto('Margine industriale', 'mi', 'euro', true),
-            rigaConfronto('Margine industriale %', 'miPct', 'perc', true),
-          ] : []))),
-      usaStruttura()
-        ? h('p', { class: 'nota', style: 'padding:0 14px 12px' }, 'Margine di contribuzione: ricavo meno costi diretti. Margine industriale: dopo aver tolto anche i costi di struttura e la riserva per imprevisti.')
-        : h('p', { class: 'nota', style: 'padding:0 14px 12px' }, 'Costi di struttura e riserva per imprevisti sono a zero, quindi non compaiono: qui il margine è ricavo meno costi diretti.'))),
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Dal preventivo al simulato' }),
-      h('div', { class: 'corpo' },
-        h('div', { id: 'cascata' }),
-        h('p', { class: 'nota', testo: 'Margine di contribuzione. Le barre intermedie scompongono ogni scostamento in effetto ricavo ed effetto costo.' }))),
-    pannelloIncidenze(),
-    tabellaGap('Gap 1 · Preventivo verso KOM', 'gapPreventivoKom',
-      'Erosione già avvenuta prima dell’inizio dei lavori: trattativa, sconto di chiusura, ridefinizione del perimetro.'),
-    tabellaGap('Gap 2 · KOM verso Simulato', 'gapKomSimulato',
-      'Erosione prospettica in esecuzione, rispetto al budget di cui il PM risponde.'),
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Riserva disponibile sul simulato' }),
-      h('div', { class: 'corpo' },
-        h('div', { class: 'campi' },
-          h('div', { class: 'metrica forte' }, h('div', { class: 'et', testo: 'Costo massimo ammissibile' }), h('div', { class: 'val', 'data-out': 'tot:simulato:cdMax:euro', testo: '—' })),
-          h('div', { class: 'metrica forte' }, h('div', { class: 'et', testo: 'Riserva residua' }), h('div', { class: 'val', 'data-out': 'tot:simulato:riserva:euro', testo: '—' })),
-          h('div', { class: 'metrica forte' }, h('div', { class: 'et', testo: 'Riserva in % sui costi' }), h('div', { class: 'val', 'data-out': 'tot:simulato:riservaPct:perc', testo: '—' }))),
-        h('p', { class: 'nota', id: 'lettura-riserva', testo: '' }))));
+    bannerEsempio(),
+    pannelloCommessa(),
+    pannelloParametri(),
+    pannelloRiepilogo(),
+    pannelloObiettivo(),
+    guidaColonne(),
+    ...sim.servizi.map((s, i) => pannelloServizio(s, i)),
+    pannelloSensitivita(),
+    pannelloAggiungiServizio());
 }
 
-
-function vociGuida(righe) {
-  return h('dl', { class: 'guida-elenco' },
-    ...righe.flatMap(([et, testo]) => [h('dt', { testo: et }), h('dd', { testo })]));
-}
-
-function schedaGuida() {
-  const suTouch = matchMedia('(hover: none)').matches;
-  const cartella = supportaCartella();
-
-  return h('div', { class: 'guida' },
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'A cosa serve' }),
-      h('div', { class: 'corpo' },
-        h('p', {}, 'Simula come si muove il margine di una commessa al variare dei costi, divisi per servizio. Non è un consuntivo e non tiene lo storico: ogni simulazione è una fotografia del momento in cui la fai. Quando serve, la salvi in archivio e non ci torni più sopra.'),
-        h('p', {}, 'Tre colonne sulla stessa struttura: ',
-          h('b', { testo: 'Preventivo' }), ' (l’offerta), ',
-          h('b', { testo: 'KOM' }), ' (il budget concordato al kick off meeting) e ',
-          h('b', { testo: 'Simulato' }), ' (lo scenario che stai provando). La colonna Simulato si scrive: metti quanto pensi che una voce costerà davvero e il margine si aggiorna subito. Svuotando la casella torna al valore di partenza.'))),
-
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Inizia semplice, aggiungi dettaglio dopo' }),
-      h('div', { class: 'corpo' },
-        h('p', {}, 'Lo strumento si apre al livello Base: per ogni servizio inserisci ricavo, materiale e manodopera. Nove numeri e hai un margine. Quando ti serve di più, i pulsanti nella scheda Dati espandono la maschera senza perdere nulla di quanto inserito.'),
-        h('p', {}, 'Dove si scrivono i valori: Preventivo e KOM sono i numeri di partenza, la colonna Simulato è quella su cui si lavora. Si scrive direttamente lì, voce per voce, ed è anche il modo per capire dove conviene ottimizzare: cambi una voce alla volta e guardi il margine.'),
-        vociGuida([
-          ['Base', 'Ricavo, materiale e manodopera per servizio, una colonna sola. Per una stima rapida, anche dal telefono.'],
-          ['Intermedio', 'Aggiunge la colonna Preventivo per il confronto con l’offerta, gli altri costi diretti (trasferte, noleggi, subappalti) e le spese generali.'],
-          ['Completo', 'Righe per marca fornitore e tipo di manodopera, con tariffe orarie. È il livello per il budget esecutivo.'],
-        ]),
-        h('p', { class: 'nota' }, 'Scendere di livello non cancella niente: nasconde soltanto. Una categoria con più voci compare come somma non modificabile finché non torni al livello Completo.'))),
-
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Tre modi di simulare' }),
-      h('div', { class: 'corpo' },
-        h('p', {}, 'Nella scheda Simulazione puoi partire da qualunque delle tre grandezze, a seconda della domanda che ti stai facendo. Non sono modalità che si escludono: agiscono tutte sugli stessi cursori.'),
-        vociGuida([
-          ['Dai costi', 'Scrivi il costo che ti aspetti nella colonna Simulato, oppure muovi i cursori per servizio o per categoria. È la domanda "se sforo, cosa succede".'],
-          ['Dai ricavi', 'Muovi i cursori dei ricavi per simulare uno sconto in trattativa o una variante riconosciuta. È la domanda "quanto posso concedere".'],
-          ['Dal margine', 'Scrivi il margine che vuoi ottenere e scegli se agire sui costi o sui ricavi: lo strumento calcola lo scostamento necessario e te lo mostra prima di applicarlo. È la domanda "cosa servirebbe per arrivarci".'],
-        ]),
-        h('p', { class: 'nota' }, 'Il calcolo che parte dal margine non dà una risposta chiusa: produce uno scostamento normale, che finisce nei cursori e da lì si ritocca, si distribuisce su un singolo servizio o si annulla.'))),
-
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Come vedere da dove arriva un numero' }),
-      h('div', { class: 'corpo' },
-        h('p', {}, suTouch
-          ? 'Tocca una cella calcolata (quelle con il bordino tratteggiato sotto) e compare il calcolo che l’ha prodotta: listino meno sconto, ore per tariffa, ricavo meno costi, e quali scostamenti sono stati applicati.'
-          : 'Clicca una cella calcolata, quelle con il bordino tratteggiato sotto, e compare il calcolo che l’ha prodotta. Fermando il puntatore sopra, lo stesso testo appare come suggerimento del browser.'),
-        h('p', { class: 'nota' }, 'Sul telefono non esiste il passaggio del dito sopra una cella: il browser non ha un evento di hover sul touch, quindi la spiegazione si apre al tocco. Si chiude toccando fuori, o con Esc da tastiera.'))),
-
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Leggere il confronto senza sbagliare' }),
-      h('div', { class: 'corpo' },
-        vociGuida([
-          ['Margine di contribuzione', 'Ricavo meno costi diretti della commessa: materiale, manodopera, trasferte, subappalti. È la leva che il PM controlla.'],
-          ['Costi di struttura', 'Quota dei costi aziendali che non sono imputati a nessuna commessa — direzione, amministrazione, acquisti, immobili, mezzi — attribuita a questa commessa in proporzione ai suoi costi diretti. La percentuale la dà il controllo di gestione. A zero sparisce da tutte le tabelle.'],
-          ['Riserva per imprevisti', 'Accantonamento sui costi per rischi non ancora emersi: varianti, rilavorazioni, fermi. Non è un costo già sostenuto. A zero sparisce.'],
-          ['Margine industriale', 'Margine di contribuzione meno costi di struttura e riserva. È quello che si confronta con il budget aziendale. Se entrambi sono a zero coincide con il margine di contribuzione, e infatti non viene mostrato.'],
-          ['Variazione assoluta', 'Quanti euro di margine si sono persi o guadagnati.'],
-          ['Punti percentuali (p.p.)', 'Differenza fra due percentuali. Da 18% a 14% sono meno 4 punti percentuali.'],
-          ['Variazione relativa', 'Quanta parte del margine si è bruciata. Da 18% a 14% è meno 25,3%: stesso fatto, numero diverso. Confonderla con i punti percentuali è l’errore più comune.'],
-          ['Effetto ricavo ed effetto costo', 'Da dove nasce lo scostamento: una concessione di prezzo o un costo che è cresciuto. Sommati danno la variazione totale.'],
-          ['Verde e rosso', 'Una regola sola in tutto lo strumento: verde quando il margine ci guadagna, rosso quando ci perde. Su un costo vuol dire scendere, su ricavo e margine salire. Il colore non è mai l\u2019unico segnale: c\u2019è sempre il segno davanti al numero, e sui valori assoluti anche una freccia.'],
-        ]),
-        h('p', {}, 'Nel pannello Incidenza puoi scegliere il riferimento, e le due letture non sono intercambiabili: sui costi diretti descrive la composizione del costo e ',
-          h('b', { testo: 'non si muove' }),
-          ' se aumenti tutte le voci nella stessa misura; sul ricavo descrive quanta parte della commessa se ne va in quella voce e si muove sempre.'))),
-
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Dal telefono' }),
-      h('div', { class: 'corpo' },
-        h('p', {}, 'Tutte le schede funzionano a larghezza telefono. Nella scheda Confronto le tabelle si ricompongono in blocchi verticali: ogni riga diventa un piccolo riquadro con la sua etichetta accanto al numero, quindi non serve scorrere di lato per leggere una cifra.'),
-        vociGuida([
-          ['Su iPhone e iPad', 'Funziona tutto tranne il collegamento a una cartella di rete: Safari non espone il selettore di cartelle, e su iOS tutti i browser usano lo stesso motore, quindi il limite vale anche per Chrome ed Edge sul telefono. Dal telefono l’archivio resta nella memoria del browser, oppure usi Apri e salva file.'],
-          ['Consiglio d’uso', 'Il telefono è comodo per il livello Base e per rivedere il confronto. Il budget esecutivo al livello Completo si compila meglio da computer.'],
-          ['Archivio condiviso', 'La cartella di rete richiede Chrome o Edge su computer. È l’unico modo per avere un archivio che sopravvive alla pulizia del browser e che altri PM possono vedere.'],
-        ]),
-        cartella
-          ? h('p', { class: 'nota', testo: 'Su questo dispositivo il collegamento a una cartella è disponibile.' })
-          : h('p', { class: 'nota', testo: 'Su questo dispositivo il collegamento a una cartella non è disponibile: usa Scarica e Apri file, oppure la memoria del browser.' }))),
-
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Prima di usarlo sul serio' }),
-      h('div', { class: 'corpo' },
-        h('p', {}, 'Se inserisci la manodopera in ore, le tariffe orarie devono essere il costo orario aziendale pieno, non il prezzo di vendita. Finché restano a zero, il margine delle righe in ore non ha significato. Le imposti nel livello Completo, nel pannello Parametri.'),
-        h('p', { class: 'nota' }, 'In alternativa, al livello Base la manodopera si inserisce direttamente in euro: nessuna tariffa da impostare, nessuno zero nascosto.'))),
-
-    h('section', { class: 'pannello' },
-      h('h2', { testo: 'Cosa non fa' }),
-      h('div', { class: 'corpo' },
-        h('p', {}, 'Niente consuntivazione ore, niente avanzamento lavori, niente storico da aggiornare, nessuna approvazione, nessun collegamento al gestionale. È voluto: serve a ragionare in fretta su uno scenario, non a sostituire il controllo di gestione.'))));
-}
-
-// --- scheda archivio ---------------------------------------------------------------
+// --- archivio -----------------------------------------------------------------------
 
 function schedaArchivio() {
   const modoArchivio = modo();
@@ -2501,11 +1873,8 @@ function schedaArchivio() {
     h('button', {
       class: 'primario', testo: 'Salva nell’archivio',
       onclick: async () => {
-        try {
-          const r = await salva(sim);
-          await ricaricaArchivio();
-          avvisa(`Salvata come ${r.nome}.`);
-        } catch (e) { avvisa('Salvataggio non riuscito: ' + e.message); }
+        try { const r = await salva(sim); await ricaricaArchivio(); avvisa(`Salvata come ${r.nome}.`); }
+        catch (e) { avvisa('Salvataggio non riuscito: ' + e.message); }
       },
     }),
     supportaCartella() ? h('button', {
@@ -2525,7 +1894,7 @@ function schedaArchivio() {
     h('button', {
       testo: 'Apri da file',
       onclick: async () => {
-        try { sim = await apriFile(); disegna(); avvisa('Simulazione caricata.'); }
+        try { sim = await apriFile(); scheda = 'cruscotto'; disegna(); avvisa('Simulazione caricata.'); }
         catch (e) { avvisa(e.message); }
       },
     }),
@@ -2533,7 +1902,7 @@ function schedaArchivio() {
       testo: 'Nuova simulazione',
       onclick: () => {
         if (!confirm('Azzerare la simulazione corrente? Quello che non è stato salvato va perso.')) return;
-        sim = nuovaSimulazione(); scheda = 'dati'; disegna(); avvisa('Nuova simulazione, maschera vuota.');
+        sim = nuovaSimulazione(); scheda = 'cruscotto'; disegna(); avvisa('Nuova simulazione, maschera vuota.');
       },
     }));
 
@@ -2541,16 +1910,16 @@ function schedaArchivio() {
     elencoArchivio.length === 0
       ? h('div', { class: 'vuoto', testo: 'Nessuna simulazione in archivio.' })
       : elencoArchivio.map((v) => {
-        const r = calcolaColonna(v.sim, 'simulato');
+        const r = calcolaStadio(v.sim, 'simulato');
         return h('div', { class: 'voce-archivio' },
           h('div', { class: 'id' },
             h('b', { testo: `${v.codice}${v.cliente ? ' · ' + v.cliente : ''}` }),
             h('small', { testo: `${v.descrizione ? v.descrizione + ' · ' : ''}${v.nome}` })),
           h('div', { style: 'display:flex;gap:10px;align-items:center;flex-wrap:wrap' },
-            h('span', { class: 'pillola ' + classeMargine(r.miPct, (v.sim.parametri?.targetPct || 0) / 100), testo: 'MI ' + perc(r.miPct) }),
+            h('span', { class: 'pillola ' + classeMargine(r.miPct, (v.sim.parametri?.targetPct || 0) / 100), testo: 'Margine ' + perc(r.miPct) }),
             h('button', {
               testo: 'Apri',
-              onclick: () => { sim = normalizza(JSON.parse(JSON.stringify(v.sim))); scheda = 'dati'; disegna(); avvisa('Aperta ' + v.nome + '. Salvando si crea una nuova voce, l’originale resta.'); },
+              onclick: () => { sim = normalizza(JSON.parse(JSON.stringify(v.sim))); scheda = 'cruscotto'; disegna(); avvisa('Aperta ' + v.nome + '. Salvando si crea una nuova voce, l’originale resta.'); },
             }),
             h('button', {
               class: 'muto', testo: 'Elimina',
@@ -2563,24 +1932,83 @@ function schedaArchivio() {
 
   const nota = modoArchivio === 'cartella'
     ? h('p', { class: 'nota', testo: 'Archivio su cartella di rete. I file restano anche se il browser viene ripulito, sono visibili da Esplora risorse e rientrano nel backup aziendale.' })
-    : h('div', { class: 'avviso' }, h('span', {}, 'Archivio nella memoria di questo browser. È un ripiego: sparisce con la pulizia dei dati di navigazione e non è condiviso con gli altri PM. ' + (supportaCartella() ? 'Collega una cartella di rete per un archivio vero.' : 'Il collegamento a una cartella richiede Chrome o Edge su desktop; altrimenti usa Scarica come file.')));
+    : h('div', { class: 'avviso' }, h('span', {}, 'Archivio nella memoria di questo browser. È un ripiego: sparisce con la pulizia dei dati di navigazione e non è condiviso. ' + (supportaCartella() ? 'Collega una cartella di rete per un archivio vero.' : 'Il collegamento a una cartella richiede Chrome o Edge su computer; altrimenti usa Scarica come file.')));
 
   return h('div', {},
     h('section', { class: 'pannello' },
       h('h2', { testo: 'Archivio delle simulazioni' }),
-      h('div', { class: 'corpo' },
-        azioni, nota,
+      h('div', { class: 'corpo' }, azioni, nota,
         h('p', { class: 'nota', testo: 'Ogni salvataggio crea una nuova voce datata. Niente si aggiorna nel tempo: una simulazione è una fotografia della data in cui è stata fatta.' }))),
     h('section', { class: 'pannello' }, h('h2', { testo: 'Simulazioni salvate' }), h('div', { class: 'corpo' }, elenco)));
 }
 
 async function ricaricaArchivio() {
-  try { elencoArchivio = await elenca(); }
-  catch { elencoArchivio = []; }
+  try { elencoArchivio = await elenca(); } catch { elencoArchivio = []; }
   if (scheda === 'archivio') disegna();
 }
 
-// --- grafici -----------------------------------------------------------------------
+// --- guida --------------------------------------------------------------------------
+
+function elencoGuida(righe) {
+  return h('dl', { class: 'guida-elenco' },
+    ...righe.flatMap(([et, testo]) => [h('dt', { testo: et }), h('dd', { testo })]));
+}
+
+function schedaGuida() {
+  const suTouch = matchMedia('(hover: none)').matches;
+  return h('div', { class: 'guida' },
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'A cosa serve' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'Simula come si muove il margine di una commessa lungo quattro stadi, dal preventivo allo scenario che stai provando. Non è un consuntivo e non tiene lo storico: ogni simulazione è una fotografia del momento in cui la fai. Quando serve, la salvi in archivio e non ci torni più sopra.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'I quattro stadi' }),
+      h('div', { class: 'corpo' },
+        elencoGuida([
+          ['Preventivo', 'il costo come stimato in offerta, e il ricavo offerto. È l’unico valore che si scrive da zero.'],
+          ['Preventivo dopo trattativa', 'quello che resta dopo la trattativa con i fornitori: sconti ottenuti, condizioni riviste.'],
+          ['KOM', 'il budget concordato al kick off meeting. È il numero di cui il PM risponde.'],
+          ['Simulato', 'lo scenario che stai provando: ottimizzazioni previste, rischi, margini di manovra.'],
+        ]),
+        h('p', {}, 'Fra una colonna e l’altra c’è una percentuale: la diminuzione ottenuta in quel passaggio. Ogni colonna è la precedente meno la sua percentuale. Una percentuale negativa è un aumento, ed è ammessa: succede che un budget salga.'),
+        h('p', { class: 'nota' }, 'Ogni casella si scrive nei due versi: percentuale o valore, quello che hai. Scrivendo il valore, la percentuale si ricalcola da sola. Così il KOM resta un numero che puoi dettare, pur essendo espresso come riduzione.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Come trovare dove ottimizzare' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'Metti il margine che vuoi raggiungere in "Partire dal margine": lo strumento calcola la riduzione uniforme che servirebbe e la può applicare a tutte le voci. Da lì la concentri dove è davvero ottenibile, alzando la percentuale su una voce e azzerandola su un’altra.'),
+        h('p', {}, 'Il grafico "Dove conviene intervenire" ordina le voci per quanto rende un taglio del 10%: in cima c’è quella dove lo stesso sforzo vale di più.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Come vedere da dove arriva un numero' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, suTouch
+          ? 'Tocca una cella calcolata, quelle con il bordino tratteggiato sotto, e compare il calcolo che l’ha prodotta.'
+          : 'Clicca una cella calcolata, quelle con il bordino tratteggiato sotto, e compare il calcolo che l’ha prodotta. Fermando il puntatore sopra, lo stesso testo appare come suggerimento del browser.'),
+        h('p', { class: 'nota' }, 'Sul telefono non esiste il passaggio del dito sopra una cella: il browser non ha un evento di hover sul touch, quindi la spiegazione si apre al tocco.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Verde e rosso' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'Una regola sola: verde quando il margine ci guadagna, rosso quando ci perde. Su un costo vuol dire scendere, su ricavo e margine salire. Il colore non è mai l’unico segnale: c’è sempre il segno davanti al numero, e sui valori assoluti anche una freccia.'))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Dal telefono' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'La tabella si ricompone in blocchi verticali: ogni numero porta con sé la propria etichetta, quindi non serve scorrere di lato.'),
+        elencoGuida([
+          ['Su iPhone e iPad', 'funziona tutto tranne il collegamento a una cartella di rete: Safari non espone il selettore di cartelle, e su iOS tutti i browser usano lo stesso motore. Dal telefono l’archivio resta nella memoria del browser, oppure usi Apri e Salva file.'],
+          ['Archivio condiviso', 'la cartella di rete richiede Chrome o Edge su computer. È l’unico modo per avere un archivio che sopravvive alla pulizia del browser.'],
+        ]))),
+
+    h('section', { class: 'pannello' },
+      h('h2', { testo: 'Cosa non fa' }),
+      h('div', { class: 'corpo' },
+        h('p', {}, 'Niente consuntivazione ore, niente avanzamento lavori, niente storico da aggiornare, nessuna approvazione, nessun collegamento al gestionale. È voluto: serve a ragionare in fretta su uno scenario, non a sostituire il controllo di gestione.'))));
+}
+
+// --- grafici ------------------------------------------------------------------------
 
 function svg(tag, attrs, ...figli) {
   const n = document.createElementNS('http://www.w3.org/2000/svg', tag);
@@ -2588,474 +2016,210 @@ function svg(tag, attrs, ...figli) {
   for (const f of figli.flat()) if (f) n.appendChild(f);
   return n;
 }
+
 function testoSvg(x, y, t, attrs = {}) {
   const n = svg('text', { x, y, 'font-size': 10, ...attrs });
   n.textContent = t;
   return n;
 }
 
+/** Cascata del margine di contribuzione attraverso i quattro stadi. */
 function disegnaCascata(r) {
   const c = $('#cascata');
   if (!c) return;
   c.textContent = '';
-  const g1 = r.gapPreventivoKom;
-  const g2 = r.gapKomSimulato;
-  const passi = [
-    { et: 'MdC preventivo', v: r.colonne.preventivo.mdc, tipo: 'totale' },
-    { et: 'Effetto ricavo', v: g1.effettoRicavo, tipo: 'delta' },
-    { et: 'Effetto costo', v: g1.effettoCosto, tipo: 'delta' },
-    { et: 'MdC KOM', v: r.colonne.kom.mdc, tipo: 'totale' },
-    { et: 'Effetto ricavo', v: g2.effettoRicavo, tipo: 'delta' },
-    { et: 'Effetto costo', v: g2.effettoCosto, tipo: 'delta' },
-    { et: 'MdC simulato', v: r.colonne.simulato.mdc, tipo: 'totale' },
-  ];
-  const L = 760, A = 230, mB = 46, mT = 18, mL = 8, mR = 8;
+
+  const passi = [];
+  STADI.forEach((st, i) => {
+    if (i > 0) {
+      const p = r.passaggi[i - 1];
+      const nomePassaggio = { trattativa: 'trattativa', kom: 'passaggio al KOM', simulato: 'simulazione' };
+      passi.push({ et: nomePassaggio[p.riduzione], v: p.dMdc, tipo: 'delta' });
+    }
+    passi.push({ et: ETICHETTA_STADIO_BREVE[st], v: r.stadi[st].mdc, tipo: 'totale' });
+  });
+
+  const L = 780; const A = 250; const mB = 44; const mT = 22; const mL = 8; const mR = 8;
   let cur = 0;
   const seg = passi.map((p) => {
     if (p.tipo === 'totale') { const s = { ...p, da: 0, a: p.v }; cur = p.v; return s; }
     const da = cur; cur += p.v; return { ...p, da, a: cur };
   });
   const valori = seg.flatMap((s) => [s.da, s.a, 0]);
-  const min = Math.min(...valori), max = Math.max(...valori);
+  const min = Math.min(...valori); const max = Math.max(...valori);
   const span = (max - min) || 1;
   const y = (v) => mT + (A - mT - mB) * (1 - (v - min) / span);
   const w = (L - mL - mR) / passi.length;
 
   const nodi = [svg('line', { class: 'asse', x1: mL, x2: L - mR, y1: y(0), y2: y(0), 'stroke-width': 1 })];
   seg.forEach((s, i) => {
-    const x = mL + i * w + w * 0.18;
-    const bw = w * 0.64;
-    const y1 = y(Math.max(s.da, s.a)), y2 = y(Math.min(s.da, s.a));
+    const x = mL + i * w + w * 0.16;
+    const bw = w * 0.68;
+    const y1 = y(Math.max(s.da, s.a)); const y2 = y(Math.min(s.da, s.a));
     const positivo = s.tipo === 'totale' ? s.a >= 0 : s.v >= 0;
     const fill = s.tipo === 'totale' ? 'var(--accento)' : (positivo ? 'var(--buono)' : 'var(--critico)');
     nodi.push(svg('rect', { x, y: y1, width: bw, height: Math.max(2, y2 - y1), fill, rx: 2 }));
     nodi.push(testoSvg(x + bw / 2, y1 - 5, s.tipo === 'totale' ? euro(s.a) : euroSegnato(s.v),
       { 'text-anchor': 'middle', 'font-size': 10, 'font-weight': 600 }));
-    const et = testoSvg(x + bw / 2, A - mB + 16, s.et, { 'text-anchor': 'middle', 'font-size': 9.5 });
-    nodi.push(et);
-    if (i < seg.length - 1) nodi.push(svg('line', { class: 'griglia', x1: x + bw, x2: mL + (i + 1) * w + w * 0.18, y1: y(s.a), y2: y(s.a), 'stroke-dasharray': '2 2', 'stroke-width': 1 }));
+    nodi.push(testoSvg(x + bw / 2, A - mB + 16, s.et, { 'text-anchor': 'middle', 'font-size': 9.5 }));
+    if (i < seg.length - 1) {
+      nodi.push(svg('line', { class: 'griglia', x1: x + bw, x2: mL + (i + 1) * w + w * 0.16, y1: y(s.a), y2: y(s.a), 'stroke-dasharray': '2 2', 'stroke-width': 1 }));
+    }
   });
-  const s = svg('svg', { viewBox: `0 0 ${L} ${A}`, width: '100%', role: 'img', 'aria-label': 'Cascata del margine di contribuzione' }, ...nodi);
-  c.appendChild(h('div', { class: 'tabellone' }, s));
+  nodi.push(testoSvg(L / 2, A - 6, 'margine di contribuzione, stadio per stadio', { 'text-anchor': 'middle', 'font-size': 9.5 }));
+
+  c.appendChild(h('div', { class: 'tabellone' },
+    svg('svg', { viewBox: `0 0 ${L} ${A}`, width: '100%', role: 'img', 'aria-label': 'Cascata del margine di contribuzione nei quattro stadi' }, ...nodi)));
 }
 
-function disegnaTornado() {
+/** Classifica delle voci per quanto rende ridurle del dieci per cento. */
+function disegnaSensitivita() {
   const c = $('#tornado');
   if (!c) return;
   c.textContent = '';
-  const s = sensitivita(sim, 10, livelloSensitivita);
-  const righe = s.righe.slice(0, 10).filter((r) => r.ampiezza > 0);
-  if (righe.length === 0) {
+  const s = sensitivita(sim, 10);
+  const righe = s.righe.filter((x) => x.guadagno > 0).slice(0, 10);
+  if (!righe.length) {
     c.appendChild(h('p', { class: 'nota', testo: 'Inserisci dei costi per vedere dove conviene intervenire.' }));
     return;
   }
-  const maxA = Math.max(...righe.map((r) => Math.max(Math.abs(r.su), Math.abs(r.giu))));
-  const L = 760, hr = 22, mT = 20, mB = 22, etW = 230;
+  const massimo = Math.max(...righe.map((x) => x.guadagno));
+  const L = 780; const hr = 24; const mT = 10; const mB = 20; const etW = 250;
   const A = mT + righe.length * hr + mB;
-  const cx = etW + (L - etW - 10) / 2;
-  const semi = (L - etW - 20) / 2;
-  const nodi = [svg('line', { class: 'asse', x1: cx, x2: cx, y1: mT - 6, y2: A - mB + 2, 'stroke-width': 1 })];
+  const larghezzaMax = L - etW - 96;
+
+  const nodi = [];
   righe.forEach((r, i) => {
     const yy = mT + i * hr;
-    nodi.push(testoSvg(etW - 8, yy + 11, r.etichetta.length > 38 ? r.etichetta.slice(0, 37) + '…' : r.etichetta, { 'text-anchor': 'end', 'font-size': 10 }));
-    for (const [v, colore] of [[r.giu, 'var(--buono)'], [r.su, 'var(--critico)']]) {
-      const lw = (Math.abs(v) / maxA) * semi;
-      nodi.push(svg('rect', { x: v >= 0 ? cx : cx - lw, y: yy + 3, width: Math.max(1, lw), height: hr - 9, fill: colore, rx: 2, opacity: .85 }));
-    }
-    nodi.push(testoSvg(cx + semi + 6, yy + 11, euroSegnato(r.su), { 'font-size': 9.5, 'text-anchor': 'end', x: L - 4 }));
+    const et = r.etichetta.length > 40 ? r.etichetta.slice(0, 39) + '…' : r.etichetta;
+    nodi.push(testoSvg(etW - 10, yy + 14, et, { 'text-anchor': 'end', 'font-size': 10 }));
+    const lw = (r.guadagno / massimo) * larghezzaMax;
+    nodi.push(svg('rect', { x: etW, y: yy + 5, width: Math.max(2, lw), height: hr - 11, fill: 'var(--buono)', rx: 2, opacity: 0.9 }));
+    nodi.push(testoSvg(etW + lw + 8, yy + 14, '+' + euro(r.guadagno), { 'font-size': 10, 'font-weight': 600 }));
   });
-  nodi.push(testoSvg(cx, A - 6, 'a sinistra il guadagno da una riduzione del 10%, a destra la perdita da un aumento', { 'text-anchor': 'middle', 'font-size': 9.5 }));
+
   c.appendChild(h('div', { class: 'tabellone' },
-    svg('svg', { viewBox: `0 0 ${L} ${A}`, width: '100%', role: 'img', 'aria-label': 'Sensitività del margine ai driver di costo' }, ...nodi)));
+    svg('svg', { viewBox: `0 0 ${L} ${A}`, width: '100%', role: 'img', 'aria-label': 'Voci ordinate per quanto rende ridurle del dieci per cento' }, ...nodi)));
 }
 
-// --- aggiornamento dei valori derivati ---------------------------------------------
-
-
-// Spiegazione del calcolo dietro ogni cella derivata, indicizzata per chiave di uscita.
-const spiegazioni = new Map();
-
-/**
- * Regola unica del colore: verde quando il margine ne guadagna, rosso quando ci perde.
- * Su un costo questo vuol dire scendere, su ricavo e margine salire. Senza una regola
- * sola, due rossi nella stessa schermata finirebbero per significare cose opposte.
- *
- * Il colore non è mai l'unico segnale: accanto c'è sempre il segno, e dove il numero è
- * assoluto anche una freccia. Circa un uomo su dodici non distingue rosso e verde.
- */
-function versoScostamento(valore, partenza, piuEMeglio) {
-  if (!(Math.abs(partenza) > 1e-9)) return { nullo: true };
-  const scarto = valore - partenza;
-  if (Math.abs(scarto) < 0.005) return { nullo: true, scarto: 0 };
-  const bene = piuEMeglio ? scarto > 0 : scarto < 0;
-  return { nullo: false, scarto, bene, classe: bene ? 'v-buono' : 'v-critico' };
-}
-
-/** Freccia accanto a un valore assoluto, perché la direzione si veda anche senza colore. */
-function segnalaDirezione(chiave, verso) {
-  for (const n of $$(`[data-out="${chiave}"]`)) {
-    const cella = n.closest ? n.closest('td') : null;
-    const freccia = cella && cella.querySelector('.direzione');
-    if (!freccia) continue;
-    if (verso.nullo) {
-      freccia.textContent = '';
-      freccia.className = 'direzione';
-      freccia.removeAttribute('title');
-      continue;
-    }
-    freccia.textContent = verso.scarto > 0 ? '\u25b2' : '\u25bc';
-    freccia.className = 'direzione ' + verso.classe;
-    freccia.setAttribute('title', `${verso.scarto > 0 ? 'più' : 'meno'} ${euro(Math.abs(verso.scarto))} rispetto al valore di partenza`);
-  }
-}
-
-function scrivi(sel, testo, classe, spiegazione, grezzo) {
-  if (spiegazione !== undefined && spiegazione !== null) spiegazioni.set(sel, spiegazione);
-  for (const n of $$(`[data-out="${sel}"]`)) {
-    if (n.tagName === 'INPUT') {
-      // Non si riscrive il campo mentre ci si sta digitando dentro.
-      if (document.activeElement !== n && grezzo !== undefined) n.value = grezzo ? numero(grezzo) : '';
-      n.classList.remove('v-buono', 'v-critico');
-      if (classe) n.classList.add(classe);
-      const s2 = spiegazioni.get(sel);
-      if (s2) n.setAttribute('title', s2);
-      continue;
-    }
-    n.textContent = testo;
-    n.classList.remove('v-buono', 'v-critico');
-    if (classe) n.classList.add(classe);
-    const s = spiegazioni.get(sel);
-    if (s) {
-      n.classList.add('spiegabile');
-      n.setAttribute('title', s);
-      n.setAttribute('tabindex', '0');
-      n.setAttribute('role', 'button');
-    }
-  }
-}
-
-/**
- * Mostra come è stato ottenuto un numero. Sul telefono non esiste il passaggio del dito
- * sopra una cella: il browser non ha un evento di hover sul touch, e il primo tocco su un
- * elemento con stile hover lo attiva soltanto. Quindi la funzione è costruita sul tocco,
- * e sul desktop resta disponibile anche come suggerimento del browser.
- */
-function chiudiSpiegazione() {
-  const p = $('#spiegazione');
-  if (p) { p.hidden = true; p.textContent = ''; }
-  for (const n of $$('.spiegabile.aperta')) n.classList.remove('aperta');
-}
-
-function mostraSpiegazione(cella) {
-  const chiave = cella.getAttribute('data-out');
-  const testo = spiegazioni.get(chiave);
-  if (!testo) return;
-  const p = $('#spiegazione');
-  if (!p) return;
-  chiudiSpiegazione();
-  cella.classList.add('aperta');
-  const et = cella.getAttribute('data-et') || cella.closest('tr')?.firstElementChild?.textContent?.trim() || '';
-  p.textContent = '';
-  p.appendChild(h('div', { class: 'titolo-spiega' },
-    h('span', { testo: et ? et + ' \u00b7 ' + cella.textContent.trim() : cella.textContent.trim() }),
-    h('button', { class: 'muto', 'aria-label': 'Chiudi', testo: '\u00d7', onclick: chiudiSpiegazione })));
-  p.appendChild(h('div', { class: 'corpo-spiega', testo }));
-  p.hidden = false;
-}
-
-function collegaSpiegazioni() {
-  document.addEventListener('click', (e) => {
-    const t2 = e.target;
-    if (!t2 || !t2.closest) return;
-    if (t2.closest('#spiegazione')) return;
-    const cella = t2.closest('[data-out].spiegabile');
-    if (cella) { e.preventDefault(); mostraSpiegazione(cella); return; }
-    chiudiSpiegazione();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') chiudiSpiegazione();
-    if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.classList
-        && e.target.classList.contains('spiegabile')) {
-      e.preventDefault();
-      mostraSpiegazione(e.target);
-    }
-  });
-}
+// --- aggiornamento dei valori derivati -----------------------------------------------
 
 function formatta(v, formato) {
   if (formato === 'perc') return perc(v);
   if (formato === 'punti') return punti(v);
-  if (formato === 'rel') return percRel(v);
   return euro(v);
-}
-
-
-const pctTesto = (v) => (Number(v) || 0).toFixed(Number.isInteger(Number(v)) ? 0 : 1).replace('.', ',') + '%';
-
-/** Testo che spiega come nasce il costo di una voce nella colonna indicata. */
-function spiegaVoce(voce, colonna, costo) {
-  const d = voce[colonna] || {};
-  if (voce.cat === 'manodopera') {
-    if (modoManodopera(voce) === 'importo') return `Importo inserito: ${euro(costo)}.`;
-    const tr = sim.tariffe.find((x) => x.id === voce.tariffaId);
-    if (!tr || !tr.eurOra) {
-      return `${numero(d.q)} h senza tariffa oraria impostata, quindi ${euro(0)}. Imposta la tariffa nel livello Completo.`;
-    }
-    return `${numero(d.q)} h \u00d7 ${numero(tr.eurOra)} \u20ac/h (${tr.nome}) = ${euro(costo)}.`;
-  }
-  if (voce.cat === 'materiale' && Number(d.sconto)) {
-    return `Listino ${euro(d.q)} meno sconto ${pctTesto(d.sconto)} = ${euro(costo)}.`;
-  }
-  return `Importo inserito: ${euro(costo)}.`;
-}
-
-function spiegaFattore(linea, voce) {
-  const dd = sim.delta || {};
-  const pezzi = [];
-  const aggiungi = (v, et) => { if (Number(v)) pezzi.push(`${et} ${Number(v) > 0 ? '+' : ''}${pctTesto(v)}`); };
-  aggiungi(dd.globale, 'tutti i costi');
-  aggiungi((dd.linea || {})[linea.id], linea.nome);
-  aggiungi((dd.catLinea || {})[linea.id + '|' + voce.cat], ETICHETTA_CATEGORIA[voce.cat]);
-  aggiungi((dd.voce || {})[voce.id], voce.nome || 'voce');
-  return pezzi;
 }
 
 function aggiornaDerivati() {
   const r = calcola(sim);
   const target = (sim.parametri.targetPct || 0) / 100;
-  const sg = sim.parametri.sgPct || 0;
-  const ctg = sim.parametri.ctgPct || 0;
+  const riserva = sim.parametri.riservaPct || 0;
+  const sSim = r.stadi.simulato;
 
-  for (const c of COLONNE) {
-    const col = r.colonne[c];
-    const et = ETICHETTA_COLONNA[c];
-    for (const [k, v] of Object.entries(col)) {
+  // Riepilogo per stadio
+  for (const st of STADI) {
+    const x = r.stadi[st];
+    const et = ETICHETTA_STADIO[st];
+    for (const [k, v] of Object.entries(x)) {
       if (typeof v === 'number' || v === null) {
-        scrivi(`tot:${c}:${k}:euro`, formatta(v, 'euro'));
-        scrivi(`tot:${c}:${k}:perc`, formatta(v, 'perc'));
+        scrivi(`tot:${st}:${k}:euro`, formatta(v, 'euro'));
+        scrivi(`tot:${st}:${k}:perc`, formatta(v, 'perc'));
       }
     }
-    scrivi(`tot:${c}:mdc:euro`, formatta(col.mdc, 'euro'), null,
-      `${et}: ricavo ${euro(col.ricavo)} meno costi diretti ${euro(col.cd)} = ${euro(col.mdc)}.`);
-    scrivi(`tot:${c}:mdcPct:perc`, formatta(col.mdcPct, 'perc'), null,
-      `${euro(col.mdc)} diviso ricavo ${euro(col.ricavo)} = ${perc(col.mdcPct)}.`);
-    scrivi(`tot:${c}:speseGenerali:euro`, formatta(col.speseGenerali, 'euro'), null,
-      `Quota dei costi aziendali non imputati a commessa, attribuita a questa in proporzione ai suoi costi diretti: ${euro(col.cd)} \u00d7 ${pctTesto(sg)} = ${euro(col.speseGenerali)}.`);
-    scrivi(`tot:${c}:contingency:euro`, formatta(col.contingency, 'euro'), null,
-      `Accantonamento per rischi non ancora emersi: costi diretti ${euro(col.cd)} \u00d7 ${pctTesto(ctg)} = ${euro(col.contingency)}.`);
-    scrivi(`tot:${c}:mi:euro`, formatta(col.mi, 'euro'), null,
-      `${euro(col.ricavo)} meno costi diretti ${euro(col.cd)} meno costi di struttura ${euro(col.speseGenerali)} meno riserva per imprevisti ${euro(col.contingency)} = ${euro(col.mi)}.`);
-    scrivi(`tot:${c}:miPct:perc`, formatta(col.miPct, 'perc'), null,
-      `${euro(col.mi)} diviso ricavo ${euro(col.ricavo)} = ${perc(col.miPct)}.`);
-    scrivi(`tot:${c}:cd:euro`, formatta(col.cd, 'euro'), null,
-      `Somma dei costi diretti delle ${col.linee.length} linee di servizio: ${euro(col.cd)}.`);
+    scrivi(`tot:${st}:mdc:euro`, euro(x.mdc), null,
+      `${et}: ricavo ${euro(x.ricavo)} meno costi diretti ${euro(x.cd)} = ${euro(x.mdc)}.`);
+    scrivi(`tot:${st}:mdcPct:perc`, perc(x.mdcPct), null,
+      `${euro(x.mdc)} diviso ricavo ${euro(x.ricavo)} = ${perc(x.mdcPct)}.`);
+    scrivi(`tot:${st}:imprevisti:euro`, euro(x.imprevisti), null,
+      `Costi diretti ${euro(x.cd)} × ${testoPct(riserva) || '0'}% = ${euro(x.imprevisti)}.`);
+    scrivi(`tot:${st}:mi:euro`, euro(x.mi), null,
+      `${euro(x.ricavo)} meno costi diretti ${euro(x.cd)} meno riserva ${euro(x.imprevisti)} = ${euro(x.mi)}.`);
+    scrivi(`tot:${st}:miPct:perc`, perc(x.miPct), null,
+      `${euro(x.mi)} diviso ricavo ${euro(x.ricavo)} = ${perc(x.miPct)}.`);
+    scrivi(`tot:${st}:spazio:euro`, euro(x.spazio), versoScostamento(x.spazio, 0, true).classe || null,
+      `Costo massimo compatibile con il margine obiettivo ${euro(x.cdMax)} meno costi ${euro(x.cd)} = ${euro(x.spazio)}.`);
+  }
 
-    for (const l of col.linee) {
-      scrivi(`cdcol:${l.id}:${c}`, euro(l.cd), null,
-        CATEGORIE.map((cat) => `${ETICHETTA_CATEGORIA[cat]} ${euro(l.perCategoria[cat] || 0)}`).join(' + ') + ` = ${euro(l.cd)}.`);
-      scrivi(`mdclinea:${l.id}:${c}`, `${euro(l.mdc)}  \u00b7  ${perc(l.mdcPct)}`, null,
-        `${l.nome}, ${et}: ricavo ${euro(l.ricavo)} meno costi ${euro(l.cd)} = ${euro(l.mdc)}, pari al ${perc(l.mdcPct)} del ricavo di linea.`);
+  // Valori e percentuali di ogni riga, stadio per stadio
+  for (const servizio of sim.servizi) {
+    const elementi = [['ric-' + servizio.id, servizio.ricavo, true, 'Ricavo del servizio'],
+      ...servizio.voci.map((v) => [v.id, v, false, v.nome || 'voce'])];
+
+    for (const [chiave, elemento, piuEMeglio, nome] of elementi) {
+      RIDUZIONI.forEach((rid, i) => {
+        const stadio = STADI[i + 1];
+        const valore = valoreAStadio(elemento, stadio);
+        const precedente = valoreAStadio(elemento, STADI[i]);
+        const verso = versoScostamento(valore, precedente, piuEMeglio);
+        const pct = Number((elemento.rid || {})[rid]) || 0;
+        const spiega = `${nome}: ${ETICHETTA_STADIO_BREVE[STADI[i]]} ${euro(precedente)}`
+          + (pct ? ` meno ${testoPct(pct)}%` : ' senza riduzione')
+          + ` = ${euro(valore)}.`;
+        scrivi(`val:${chiave}:${stadio}`, euro(valore), verso.classe || null, spiega, valore);
+        scrivi(`rid:${chiave}:${rid}`, testoPct(pct), null, undefined, pct, true);
+        segnalaDirezione(`val:${chiave}:${stadio}`, verso);
+      });
+    }
+
+    for (const st of STADI) {
+      const s = r.stadi[st].servizi.find((x) => x.id === servizio.id);
+      if (!s) continue;
+      scrivi(`cdserv:${servizio.id}:${st}`, euro(s.cd), null,
+        CATEGORIE.map((cat) => `${ETICHETTA_CATEGORIA[cat]} ${euro(s.perCategoria[cat] || 0)}`).join(' + ') + ` = ${euro(s.cd)}.`);
+      scrivi(`mdcserv:${servizio.id}:${st}`, `${euro(s.mdc)}  ·  ${perc(s.mdcPct)}`, null,
+        `${servizio.nome}, ${ETICHETTA_STADIO[st]}: ricavo ${euro(s.ricavo)} meno costi ${euro(s.cd)} = ${euro(s.mdc)}.`);
       for (const cat of CATEGORIE) {
-        scrivi(`catcol:${l.id}:${cat}:${c}`, euro(l.perCategoria[cat]), null,
-          `Somma delle voci di ${ETICHETTA_CATEGORIA[cat]} in ${l.nome}, colonna ${et}: ${euro(l.perCategoria[cat])}.`);
+        scrivi(`cat:${servizio.id}:${cat}:${st}`, euro(s.perCategoria[cat]), null,
+          `Somma delle voci di ${ETICHETTA_CATEGORIA[cat]} in ${servizio.nome}, stadio ${ETICHETTA_STADIO[st]}: ${euro(s.perCategoria[cat])}.`);
       }
     }
   }
 
-  const s = r.colonne.simulato;
-  const baseEt = ETICHETTA_COLONNA[r.baseSimulazione];
-  for (const linea of sim.linee) {
-    const l = s.linee.find((x) => x.id === linea.id);
-    if (!l) continue;
-    const dRic = [];
-    if (Number((sim.delta || {}).ricavo)) dRic.push(`tutti i ricavi ${pctTesto(sim.delta.ricavo)}`);
-    if (Number(((sim.delta || {}).ricavoLinea || {})[linea.id])) dRic.push(`${linea.nome} ${pctTesto(sim.delta.ricavoLinea[linea.id])}`);
-    scrivi('ricavo:' + linea.id, euro(l.ricavo), null,
-      `Ricavo ${baseEt} ${euro(linea.ricavo[r.baseSimulazione])}`
-      + (dRic.length ? `, con gli scostamenti ${dRic.join(' e ')}` : ', nessuno scostamento sui ricavi')
-      + ` = ${euro(l.ricavo)}.`, l.ricavo);
-    const versoRicavo = versoScostamento(l.ricavo, num(linea.ricavo[r.baseSimulazione]), true);
-    scrivi('ricavo:' + linea.id, euro(l.ricavo), versoRicavo.classe || null, undefined, l.ricavo);
-    segnalaDirezione('ricavo:' + linea.id, versoRicavo);
-
-    for (const cat of CATEGORIE) {
-      const n = linea.voci.filter((v) => v.cat === cat).length;
-      scrivi(`cat:${linea.id}:${cat}`, euro(l.perCategoria[cat]), null,
-        `Somma di ${n} ${n === 1 ? 'voce' : 'voci'} di ${ETICHETTA_CATEGORIA[cat]} nella colonna Simulato: ${euro(l.perCategoria[cat])}.`);
-    }
-
-    for (const voce of linea.voci) {
-      const costo = l.voci[voce.id] || 0;
-      const baseCosto = r.colonne[r.baseSimulazione].linee.find((x) => x.id === linea.id)?.voci[voce.id] || 0;
-      const fattori = spiegaFattore(linea, voce);
-      const parti = [`Base ${baseEt}: ` + spiegaVoce(voce, r.baseSimulazione, baseCosto)];
-      parti.push(fattori.length
-        ? `Scostamenti applicati: ${fattori.join(', ')}. Risultato simulato ${euro(costo)}.`
-        : 'Nessuno scostamento applicato a questa voce.');
-      const verso = versoScostamento(costo, baseCosto, false);
-      scrivi('voce:' + voce.id, euro(costo), verso.classe || null, parti.join(' '), costo);
-      segnalaDirezione('voce:' + voce.id, verso);
-    }
-  }
-
-  const kom = r.colonne.kom;
-  for (const l of kom.linee) {
-    for (const cat of CATEGORIE) {
-      const base = l.perCategoria[cat];
-      const simCat = s.linee.find((x) => x.id === l.id)?.perCategoria[cat] ?? 0;
-      const v = versoScostamento(simCat, base, false);
-      scrivi(`catsim:${l.id}:${cat}`, base ? euroSegnato(simCat - base) : '\u2014', v.classe || null);
-    }
-  }
-
-  for (const [chiave, g] of [['gapPreventivoKom', r.gapPreventivoKom], ['gapKomSimulato', r.gapKomSimulato]]) {
-    const da = ETICHETTA_COLONNA[g.da];
-    const a = ETICHETTA_COLONNA[g.a];
-    const spiega = {
-      dMdc: `Margine di contribuzione ${a} meno ${da}: ${euro(r.colonne[g.a].mdc)} meno ${euro(r.colonne[g.da].mdc)} = ${euroSegnato(g.dMdc)}.`,
-      dMi: `Margine industriale ${a} meno ${da}: ${euroSegnato(g.dMi)}.`,
-      dMdcPp: `Marginalità ${a} ${perc(r.colonne[g.a].mdcPct)} meno marginalità ${da} ${perc(r.colonne[g.da].mdcPct)} = ${punti(g.dMdcPp)}. È una differenza fra due percentuali, quindi si misura in punti percentuali.`,
-      dMiPp: `Margine industriale ${a} ${perc(r.colonne[g.a].miPct)} meno ${da} ${perc(r.colonne[g.da].miPct)} = ${punti(g.dMiPp)}.`,
-      dMdcRel: `Quanta parte del margine di ${da} si è persa: ${euroSegnato(g.dMdc)} diviso ${euro(r.colonne[g.da].mdc)} = ${percRel(g.dMdcRel)}. Non confonderla con i punti percentuali.`,
-      dMiRel: `Variazione relativa del margine industriale rispetto a ${da}: ${percRel(g.dMiRel)}.`,
-      effettoRicavo: `Ricavo ${a} ${euro(r.colonne[g.a].ricavo)} meno ricavo ${da} ${euro(r.colonne[g.da].ricavo)} = ${euroSegnato(g.effettoRicavo)}. È la parte di scostamento dovuta al prezzo, non ai costi.`,
-      effettoCosto: `Costi ${da} ${euro(r.colonne[g.da].cd)} meno costi ${a} ${euro(r.colonne[g.a].cd)} = ${euroSegnato(g.effettoCosto)}. Sommato all'effetto ricavo dà ${euroSegnato(g.dMdc)}.`,
-    };
-    for (const [k, formato] of [['dMdc', 'euro'], ['dMi', 'euro'], ['dMdcPp', 'punti'], ['dMiPp', 'punti'], ['dMdcRel', 'rel'], ['dMiRel', 'rel'], ['effettoRicavo', 'euro'], ['effettoCosto', 'euro']]) {
-      const v = g[k];
-      scrivi(`gap:${chiave}:${k}:${formato}`, formatta(v, formato),
-        v === null ? null : (v >= 0 ? 'v-buono' : 'v-critico'), spiega[k]);
-    }
-    const tb = $(`[data-lista="perlinea:${chiave}"]`);
-    if (tb) {
-      tb.textContent = '';
-      for (const l of g.perLinea) {
-        tb.appendChild(h('tr', {},
-          h('td', { 'data-et': 'Servizio', testo: l.nome }),
-          h('td', { class: 'n ' + (l.effettoRicavo >= 0 ? 'v-buono' : 'v-critico'), 'data-et': 'Effetto ricavo', testo: euroSegnato(l.effettoRicavo) }),
-          ...CATEGORIE.map((c) => h('td', { class: 'n ' + (l.perCategoria[c] >= 0 ? 'v-buono' : 'v-critico'), 'data-et': ETICHETTA_CATEGORIA[c], testo: euroSegnato(l.perCategoria[c]) })),
-          h('td', { class: 'n', 'data-et': 'Totale', style: 'font-weight:600', testo: euroSegnato(l.dMdc) })));
-      }
-    }
-  }
-
-  const corpoInc = $('[data-lista="incidenze"]');
-  if (corpoInc) {
-    corpoInc.textContent = '';
-    const { righe } = incidenze(sim, r, riferimentoIncidenza);
-    const denomEt = riferimentoIncidenza === 'ricavo' ? 'ricavo' : 'costi diretti';
-    for (const riga of righe) {
-      const classeRiga = riga.tipo === 'totale' ? 'riga-totale' : riga.tipo === 'margine' ? 'riga-margine' : '';
-      const cellaDelta = (v, et) => {
-        if (v === null || !Number.isFinite(v)) return h('td', { class: 'n', 'data-et': et, testo: 'n.d.' });
-        if (Math.abs(v) < 0.05) return h('td', { class: 'n fermo', 'data-et': et, testo: 'invariata' });
-        const bene = riga.tipo === 'margine' ? v > 0 : v < 0;
-        return h('td', { class: 'n ' + (bene ? 'v-buono' : 'v-critico'), 'data-et': et, testo: punti(v) });
-      };
-      corpoInc.appendChild(h('tr', classeRiga ? { class: classeRiga } : {},
-        h('td', { class: 'liv' + riga.livello, 'data-et': 'Voce', testo: riga.nome }),
-        ...COLONNE.map((c) => h('td', {
-          class: 'n', 'data-et': ETICHETTA_COLONNA[c],
-          title: `Peso di "${riga.nome}" sui ${denomEt} della colonna ${ETICHETTA_COLONNA[c]}.`,
-          testo: perc(riga.valori[c]),
-        })),
-        cellaDelta(riga.dPreventivoKom, 'Prev \u2192 KOM'),
-        cellaDelta(riga.dKomSimulato, 'KOM \u2192 Sim')));
-    }
-  }
-
-  const rif = r.colonne[r.baseSimulazione];
-  const etRif = ETICHETTA_COLONNA[r.baseSimulazione];
+  // Barra dei risultati, confrontata con lo stadio KOM
+  const rif = r.stadi.kom;
   const cls = (valore, partenza, piuEMeglio) => versoScostamento(valore, partenza, piuEMeglio).classe || null;
-  scrivi('barra:ricavo', euro(s.ricavo), cls(s.ricavo, rif.ricavo, true));
-  scrivi('barra:costi', euro(s.cd), cls(s.cd, rif.cd, false));
-  scrivi('barra:mdc', euro(s.mdc), cls(s.mdc, rif.mdc, true),
-    `Ricavo ${euro(s.ricavo)} meno costi diretti ${euro(s.cd)} = ${euro(s.mdc)}. Rispetto a ${etRif}: ${euroSegnato(s.mdc - rif.mdc)}.`);
-  for (const c of COLONNE) {
-    scrivi(`barra:mdcpct:${c}`, perc(r.colonne[c].mdcPct),
-      c === 'simulato' ? cls(s.mdcPct, rif.mdcPct, true) : null);
-  }
-  scrivi('barra:mi', euro(s.mi), cls(s.mi, rif.mi, true));
+  scrivi('barra:ricavo', euro(sSim.ricavo), cls(sSim.ricavo, rif.ricavo, true));
+  scrivi('barra:costi', euro(sSim.cd), cls(sSim.cd, rif.cd, false));
+  scrivi('barra:mdc', euro(sSim.mdc), cls(sSim.mdc, rif.mdc, true),
+    `Ricavo ${euro(sSim.ricavo)} meno costi diretti ${euro(sSim.cd)} = ${euro(sSim.mdc)}. Rispetto al KOM: ${euroSegnato(sSim.mdc - rif.mdc)}.`);
+  scrivi('barra:mdcpct', perc(sSim.mdcPct), cls(sSim.mdcPct, rif.mdcPct, true));
+  scrivi('barra:komPct', perc(rif.mdcPct));
 
-  const colBase = r.colonne[r.baseSimulazione];
-  scrivi('cmp:intestazione', ETICHETTA_COLONNA[r.baseSimulazione]);
-  for (const [k, formato] of [['ricavo', 'euro'], ['cd', 'euro'], ['mdc', 'euro'], ['mdcPct', 'perc'], ['mi', 'euro'], ['miPct', 'perc']]) {
-    scrivi(`cmp:${k}:base:${formato}`, formatta(colBase[k], formato));
-    scrivi(`cmp:${k}:sim:${formato}`, formatta(s[k], formato));
-    if (formato === 'perc') {
-      const pp = (colBase[k] === null || s[k] === null) ? null : (s[k] - colBase[k]) * 100;
-      scrivi(`cmp:${k}:delta:${formato}`, punti(pp), pp === null ? null : (pp >= 0 ? 'v-buono' : 'v-critico'));
-    } else {
-      const d = s[k] - colBase[k];
-      const positivo = k === 'cd' ? d <= 0 : d >= 0;
-      scrivi(`cmp:${k}:delta:${formato}`, euroSegnato(d), positivo ? 'v-buono' : 'v-critico');
-    }
+  const pil = $('#semaforo');
+  if (pil) {
+    pil.className = 'pillola ' + classeMargine(sSim.miPct, target);
+    const nome = usaRiserva() ? 'Margine industriale' : 'Margine';
+    pil.textContent = nome + ' simulato ' + perc(sSim.miPct) + (target > 0 ? ' · obiettivo ' + perc(target) : '');
   }
+
+  const lettura = $('#lettura-spazio');
+  if (lettura) {
+    if (!(sSim.ricavo > 0)) lettura.textContent = 'Inserisci il ricavo per calcolare lo spazio residuo sui costi.';
+    else if (sSim.spazio >= 0) lettura.textContent = `Allo stadio simulato i costi possono crescere di ${euro(sSim.spazio)} (${perc(sSim.spazioPct)}) prima di scendere sotto il margine obiettivo.`;
+    else lettura.textContent = `Allo stadio simulato i costi superano di ${euro(-sSim.spazio)} il massimo compatibile con il margine obiettivo: servono ${perc(-sSim.spazioPct)} di riduzione.`;
+  }
+
   const esito = $('#esito-margine');
   if (esito) {
     const voluto = margineVoluto === null ? (sim.parametri.targetPct || 0) : margineVoluto;
-    const res = scostamentoPerMargine(sim, voluto, levaMargine);
+    const res = riduzionePerMargine(sim, voluto);
     esito.className = 'esito-margine';
     if (!res.possibile) {
       esito.textContent = res.motivo;
       esito.classList.add('esito-nulla');
-    } else if (res.negativo) {
-      esito.textContent = `Con questi ricavi il ${perc(voluto / 100)} non è raggiungibile agendo sui costi: servirebbero costi negativi. Prova con i ricavi.`;
-      esito.classList.add('esito-nulla');
     } else {
-      const su = res.leva === 'costi' ? 'tutti i costi' : 'tutti i ricavi';
-      esito.textContent = `Per arrivare al ${perc(voluto / 100)} serve ${percRel(res.deltaPct)} su ${su}: `
+      esito.textContent = `Per arrivare al ${perc(voluto / 100)} serve una riduzione del ${testoPct(Math.round(res.riduzionePct * 100) / 100) || '0'}% su tutte le voci: `
         + `da ${euro(res.attuale)} a ${euro(res.richiesto)}, ${euroSegnato(res.variazione)}.`;
-      esito.classList.add(res.deltaPct === 0 ? 'esito-nulla' : (res.leva === 'costi' ? (res.deltaPct < 0 ? 'esito-sforzo' : 'esito-agio') : (res.deltaPct > 0 ? 'esito-sforzo' : 'esito-agio')));
+      esito.classList.add(res.riduzionePct > 0.005 ? 'esito-sforzo' : 'esito-agio');
     }
   }
 
-  const nb = $('#base-simulazione');
-  if (nb) {
-    nb.textContent = r.baseSimulazione === 'kom'
-      ? 'La simulazione parte dalla colonna KOM. Gli scostamenti non modificano il KOM: creano una terza colonna.'
-      : 'La colonna KOM è ancora vuota, quindi la simulazione parte dal Preventivo. Compilando il KOM la base passa automaticamente a quello.';
-  }
-
-  const pil = $('#semaforo');
-  if (pil) {
-    pil.className = 'pillola ' + classeMargine(s.miPct, target);
-    const nome = usaStruttura() ? 'Margine industriale' : 'Margine';
-    pil.textContent = nome + ' simulato ' + perc(s.miPct) + (target > 0 ? ' \u00b7 obiettivo ' + perc(target) : '');
-  }
-
-  scrivi('tot:simulato:cdMax:euro', euro(s.cdMax), null,
-    `Ricavo ${euro(s.ricavo)} \u00d7 (100% meno obiettivo ${perc(target)}) diviso (1 + costi di struttura ${pctTesto(sg)} + riserva ${pctTesto(ctg)}) = ${euro(s.cdMax)}.`);
-  scrivi('tot:simulato:riserva:euro', euro(s.riserva), null,
-    `Costo massimo ammissibile ${euro(s.cdMax)} meno costi simulati ${euro(s.cd)} = ${euro(s.riserva)}.`);
-  scrivi('tot:simulato:riservaPct:perc', perc(s.riservaPct), null,
-    `${euro(s.riserva)} diviso costi simulati ${euro(s.cd)} = ${perc(s.riservaPct)}.`);
-
-  const lettura = $('#lettura-riserva');
-  if (lettura) {
-    if (!(s.ricavo > 0)) lettura.textContent = 'Inserisci i ricavi dei servizi per calcolare la riserva.';
-    else if (s.riserva >= 0) lettura.textContent = `I costi possono crescere di ${euro(s.riserva)} (${perc(s.riservaPct)}) prima di scendere sotto il margine obiettivo.`;
-    else lettura.textContent = `I costi superano già di ${euro(-s.riserva)} il massimo compatibile con il margine obiettivo: servono ${perc(-s.riservaPct)} di riduzione.`;
-  }
-
-  if (scheda === 'confronto') disegnaCascata(r);
-  if (scheda === 'simulazione') disegnaTornado();
-
+  if (scheda === 'cruscotto') { disegnaCascata(r); disegnaSensitivita(); }
   salvaBozza(sim);
 }
 
-// --- struttura -----------------------------------------------------------------------
+// --- esportazione e consegna ---------------------------------------------------------
 
-const SCHEDE = [
-  ['dati', 'Dati di commessa'],
-  ['simulazione', 'Simulazione'],
-  ['confronto', 'Confronto'],
-  ['archivio', 'Archivio'],
-  ['guida', 'Guida'],
-];
-
-/** In un contenitore incorporato i download vengono bloccati senza alcun errore visibile.
- *  In quel caso si offre il testo da copiare, invece di un pulsante che non fa nulla. */
 function incorporata() {
   try { return window.self !== window.top; } catch { return true; }
 }
@@ -3084,46 +2248,54 @@ function offriTesto(titolo, nomeSuggerito, testo) {
   area.select();
 }
 
-function consegna(nomeFileCompleto, tipo, contenuto, titolo) {
-  if (incorporata()) { offriTesto(titolo, nomeFileCompleto, contenuto); return; }
-  consegna(nomeFile(sim).replace(/\.json$/, '.csv'), 'text/csv;charset=utf-8', '﻿' + csv,
-    'Esportazione CSV');
-}
-
 function esportaCsv() {
   const r = calcola(sim);
   const righe = [['Commessa', sim.meta.codice], ['Cliente', sim.meta.cliente], ['Data', sim.meta.data], []];
-  righe.push(['Servizio', 'Categoria', 'Voce', 'Preventivo', 'KOM', 'Simulato']);
-  for (const linea of sim.linee) {
+  righe.push(['Servizio', 'Categoria', 'Voce', ...STADI.map((s) => ETICHETTA_STADIO[s]),
+    ...RIDUZIONI.map((x) => 'Riduzione ' + x + ' %')]);
+
+  for (const servizio of sim.servizi) {
+    righe.push([servizio.nome, 'Ricavo', '',
+      ...STADI.map((s) => valoreAStadio(servizio.ricavo, s)),
+      ...RIDUZIONI.map((x) => Number((servizio.ricavo.rid || {})[x]) || 0)]);
     for (const cat of CATEGORIE) {
-      for (const v of linea.voci.filter((x) => x.cat === cat)) {
-        righe.push([linea.nome, ETICHETTA_CATEGORIA[cat], v.nome,
-          r.colonne.preventivo.linee.find((l) => l.id === linea.id)?.voci[v.id] ?? 0,
-          r.colonne.kom.linee.find((l) => l.id === linea.id)?.voci[v.id] ?? 0,
-          r.colonne.simulato.linee.find((l) => l.id === linea.id)?.voci[v.id] ?? 0]);
+      for (const v of servizio.voci.filter((x) => x.cat === cat)) {
+        righe.push([servizio.nome, ETICHETTA_CATEGORIA[cat], v.nome,
+          ...STADI.map((s) => valoreAStadio(v, s)),
+          ...RIDUZIONI.map((x) => Number((v.rid || {})[x]) || 0)]);
       }
     }
-    righe.push([linea.nome, 'Ricavo', '', ...COLONNE.map((c) => r.colonne[c].linee.find((l) => l.id === linea.id)?.ricavo ?? 0)]);
   }
   righe.push([]);
-  for (const [et, k] of [['Ricavo', 'ricavo'], ['Costi diretti', 'cd'], ['Margine di contribuzione', 'mdc'], ['Spese generali', 'speseGenerali'], ['Contingency', 'contingency'], ['Margine industriale', 'mi']]) {
-    righe.push(['TOTALE', et, '', ...COLONNE.map((c) => r.colonne[c][k])]);
+  for (const [et, k] of [['Ricavo', 'ricavo'], ['Costi diretti', 'cd'], ['Margine di contribuzione', 'mdc'],
+    ['Riserva per imprevisti', 'imprevisti'], ['Margine industriale', 'mi']]) {
+    righe.push(['TOTALE', et, '', ...STADI.map((s) => r.stadi[s][k])]);
   }
-  righe.push(['TOTALE', 'Marginalità %', '', ...COLONNE.map((c) => (r.colonne[c].mdcPct ?? 0) * 100)]);
-  righe.push(['TOTALE', 'Margine industriale %', '', ...COLONNE.map((c) => (r.colonne[c].miPct ?? 0) * 100)]);
+  righe.push(['TOTALE', 'Marginalità %', '', ...STADI.map((s) => (r.stadi[s].mdcPct ?? 0) * 100)]);
+  righe.push(['TOTALE', 'Margine industriale %', '', ...STADI.map((s) => (r.stadi[s].miPct ?? 0) * 100)]);
 
-  const csv = righe.map((r2) => r2.map((c) => {
+  const csv = righe.map((riga) => riga.map((c) => {
     const s = typeof c === 'number' ? String(Math.round(c * 100) / 100).replace('.', ',') : String(c ?? '');
     return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }).join(';')).join('\r\n');
 
+  const nomeCsv = nomeFile(sim).replace(/\.json$/, '.csv');
+  if (incorporata()) { offriTesto('Esportazione CSV', nomeCsv, csv); return; }
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = nomeFile(sim).replace(/\.json$/, '.csv');
+  a.href = url; a.download = nomeCsv;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
+
+// --- struttura -----------------------------------------------------------------------
+
+const SCHEDE = [
+  ['cruscotto', 'Cruscotto'],
+  ['archivio', 'Archivio'],
+  ['guida', 'Guida'],
+];
 
 function disegna() {
   chiudiSpiegazione();
@@ -3138,23 +2310,17 @@ function disegna() {
 
   let contenuto;
   try {
-    contenuto = scheda === 'dati' ? schedaDati()
-      : scheda === 'simulazione' ? schedaSimulazione()
-        : scheda === 'confronto' ? schedaConfronto()
-          : scheda === 'guida' ? schedaGuida()
-            : schedaArchivio();
+    contenuto = scheda === 'cruscotto' ? schedaCruscotto()
+      : scheda === 'guida' ? schedaGuida()
+        : schedaArchivio();
   } catch (e) {
-    // Meglio una schermata che spiega il problema di una pagina bianca: i dati inseriti
-    // restano in memoria e le altre schede continuano a funzionare.
     contenuto = h('div', { class: 'avviso' },
       h('span', {}, 'Questa scheda non si è potuta aprire: ' + (e && e.message ? e.message : 'errore sconosciuto')
         + '. Le altre schede e i dati inseriti non sono stati toccati.'));
   }
 
-  const main = h('main', {}, contenuto);
-
   radice.appendChild(nav);
-  radice.appendChild(main);
+  radice.appendChild(h('main', {}, contenuto));
   disegnaMessaggio();
   aggiornaDerivati();
 }
@@ -3176,22 +2342,18 @@ function testa() {
       })));
 }
 
-
 function barra() {
   const metrica = (et, chiave, classe = '') => h('div', { class: 'metrica ' + classe },
     h('div', { class: 'et', testo: et }),
-    h('div', { class: 'val', 'data-out': chiave, testo: '\u2014' }));
+    h('div', { class: 'val', 'data-out': chiave, testo: '—' }));
 
-  // Su schermo stretto restano solo semaforo, margine e marginalità simulata: le altre
-  // metriche sono marcate secondarie e si nascondono, altrimenti la barra mangia lo schermo.
   return h('footer', { class: 'barra' },
-    h('span', { class: 'pillola p-neutro', id: 'semaforo', testo: '\u2014' }),
+    h('span', { class: 'pillola p-neutro', id: 'semaforo', testo: '—' }),
     metrica('Ricavo simulato', 'barra:ricavo', 'secondaria'),
-    metrica('Costi diretti', 'barra:costi', 'secondaria'),
+    metrica('Costi simulati', 'barra:costi', 'secondaria'),
     metrica('MdC simulato', 'barra:mdc', 'forte'),
-    metrica('Marginalità prev.', 'barra:mdcpct:preventivo', 'secondaria'),
-    metrica('Marginalità KOM', 'barra:mdcpct:kom', 'secondaria'),
-    metrica('Marginalità sim.', 'barra:mdcpct:simulato', 'forte'));
+    metrica('Marginalità KOM', 'barra:komPct', 'secondaria'),
+    metrica('Marginalità sim.', 'barra:mdcpct', 'forte'));
 }
 
 function datalist() {
@@ -3206,12 +2368,12 @@ function avvia() {
   document.body.appendChild(h('div', { id: 'messaggio', hidden: true }));
   document.body.appendChild(h('div', { id: 'spiegazione', hidden: true, role: 'status' }));
   document.body.appendChild(barra());
-  collegaSpiegazioni();
   document.body.appendChild(datalist());
+  collegaSpiegazioni();
 
   const bozza = leggiBozza();
-  const bozzaUtile = bozza && (bozza.meta.codice || bozza.linee.some((l) => l.voci.some((v) => v.kom.q || v.preventivo.q)));
-  sim = bozzaUtile ? bozza : simulazioneEsempio();
+  const utile = bozza && (bozza.meta.codice || (bozza.servizi || []).some((s) => (s.voci || []).some((v) => Number(v.base))));
+  sim = utile ? bozza : simulazioneEsempio();
 
   disegna();
   ripristinaCartella().then(() => ricaricaArchivio());

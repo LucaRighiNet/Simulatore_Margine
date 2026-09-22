@@ -201,9 +201,9 @@ tr.cat td {
 }
 tr.somma td { font-weight: 600; background: color-mix(in srgb, var(--accento-tenue) 55%, transparent); }
 tr.somma td.n { font-family: var(--mono); }
-.linea-titolo { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--linea); }
-.linea-titolo input { font-size: 14px; font-weight: 600; border-color: transparent; background: none; }
-.linea-titolo input:hover { border-color: var(--linea-forte); }
+.servizio-titolo { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--linea); }
+.servizio-titolo input { font-size: 14px; font-weight: 600; border-color: transparent; background: none; }
+.servizio-titolo input:hover { border-color: var(--linea-forte); }
 
 .coppia { display: flex; gap: 4px; align-items: center; }
 .coppia input { width: 100%; }
@@ -360,15 +360,22 @@ table.tab-dati td.azione-riga { padding-top: 8px; }
 }
 .valore-vivo b { font-family: var(--mono); color: var(--ink-2); font-weight: 500; }
 
-/* --- scelta del livello di dettaglio --- */
-.pannello-livello .corpo { padding-top: 10px; padding-bottom: 10px; }
-.scelta-livello { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+/* --- colonne percentuali fra uno stadio e l'altro --- */
+.cella-pct { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+.coppia-pct { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
+.coppia-pct input.pct {
+  width: 44px; padding-left: 4px; padding-right: 4px;
+  font-size: 13px; color: var(--ink-2);
+}
+.coppia-pct input.pct:placeholder-shown { color: var(--ink-3); }
+.coppia-pct .suff { font-size: 10px; color: var(--ink-3); }
+th.th-pct { color: var(--ink-3); font-size: 11px; letter-spacing: 0; }
+th.th-simulato { color: var(--accento); }
+td.col-simulato { background: color-mix(in srgb, var(--accento-tenue) 35%, transparent); }
 .et-livello {
   font-size: 10px; text-transform: uppercase; letter-spacing: .09em; color: var(--ink-3); font-weight: 600;
 }
 .gruppo-bottoni { display: flex; flex-wrap: wrap; gap: 4px; }
-button.espandi { border-style: dashed; color: var(--accento); border-color: var(--accento); }
-button.espandi:hover { background: var(--accento-tenue); }
 button.commuta {
   font-size: 10.5px; border: 1px solid var(--linea); border-radius: 99px;
   padding: 1px 8px; color: var(--ink-3);
@@ -516,7 +523,11 @@ table.tab-dati th:last-of-type, table.tab-dati th.n:nth-last-child(2) { color: v
   table.tab-dati td.azione-riga::before { content: none; }
   table.tab-dati td.azione-riga:empty { display: none; }
   table.tab-dati .coppia { flex: 1 1 auto; justify-content: flex-end; }
-  table.tab-dati td input:not(.sconto) { max-width: 150px; }
+  table.tab-dati td:not(:first-child) input:not(.pct) { max-width: 150px; }
+  table.tab-dati td:first-child input { width: 100%; max-width: none; }
+  table.tab-dati td.cella-pct { background: none; }
+  .coppia-pct { justify-content: flex-end; }
+  .coppia-pct input.pct { width: 64px; }
   table.tab-dati tr.cat td { border-radius: var(--r); }
   table.tab-confronto tr.somma td:first-child,
   table.tab-dati tr.somma td:first-child { border-bottom-color: var(--linea-forte); }
